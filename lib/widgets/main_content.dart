@@ -65,7 +65,7 @@ class MainContent extends StatelessWidget {
               final isScanning = audioProvider.isScanning;
 
               return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 104),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -205,7 +205,6 @@ class MainContent extends StatelessWidget {
             },
           ),
         ),
-        const SizedBox(height: 120), // Padding for PlayerBar
       ],
     );
   }

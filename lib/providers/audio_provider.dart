@@ -61,6 +61,14 @@ class AudioProvider extends ChangeNotifier {
 
     // Load cache first, then scan for new files
     _loadCacheAndScan();
+
+    // Listen to position stream directly for smooth progress
+    if (_audioHandler is MyAudioHandler) {
+      _audioHandler.player.positionStream.listen((pos) {
+        _position = pos;
+        notifyListeners();
+      });
+    }
   }
 
   Future<void> _loadCacheAndScan() async {

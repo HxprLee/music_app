@@ -8,17 +8,24 @@ import 'screens/home_screen.dart';
 import 'package:audio_service/audio_service.dart';
 import 'services/audio_handler.dart';
 
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
+import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
+
 late AudioHandler _audioHandler;
 
 Future<void> main() async {
   // Ensure widgets are initialized
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Explicitly register JustAudioMediaKit
+  JustAudioPlatform.instance = JustAudioMediaKit();
+  JustAudioMediaKit.ensureInitialized();
+
   // Initialize transparent window
   await Window.initialize();
   await Window.setEffect(
     effect: WindowEffect.transparent,
-    color: Colors.transparent,
+    color: const Color.fromARGB(165, 18, 22, 26),
   );
 
   // Initialize AudioService
@@ -45,7 +52,7 @@ class MusicApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color.fromARGB(179, 18, 22, 26),
+          scaffoldBackgroundColor: const Color.fromARGB(0, 0, 0, 0),
           colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFFFCE7AC),
             brightness: Brightness.dark,
