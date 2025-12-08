@@ -41,7 +41,7 @@ class SongCache {
     return '${songPath.hashCode.abs()}.jpg';
   }
 
-  /// Load all cached songs
+  /// Load all cached songs (without loading album art bytes into memory)
   static Future<List<Song>> loadCache() async {
     try {
       final file = File(await _cacheFilePath);
@@ -55,12 +55,10 @@ class SongCache {
 
       final songs = <Song>[];
       for (final json in jsonList) {
-        Uint8List? albumArt;
+        // Just check if album art file exists - don't load bytes
         final artPath = '$artDirPath/${_artFileName(json['path'])}';
         final artFile = File(artPath);
-        if (await artFile.exists()) {
-          albumArt = await artFile.readAsBytes();
-        }
+        final hasArt = await artFile.exists();
 
         songs.add(
           Song(
@@ -68,7 +66,7 @@ class SongCache {
             title: json['title'] ?? 'Unknown',
             artist: json['artist'] ?? 'Unknown Artist',
             album: json['album'],
-            albumArt: albumArt,
+            hasAlbumArt: hasArt, // Lightweight flag
             lyrics: json['lyrics'],
             duration: json['durationMs'] != null
                 ? Duration(milliseconds: json['durationMs'])
@@ -84,25 +82,19 @@ class SongCache {
     }
   }
 
-  /// Save all songs to cache
+  /// Save all songs to cache (album art saved to disk separately)
   static Future<void> saveCache(List<Song> songs) async {
     try {
       await init();
-      final artDirPath = await _artDir;
 
       final jsonList = <Map<String, dynamic>>[];
       for (final song in songs) {
-        // Save album art to file
-        if (song.albumArt != null) {
-          final artPath = '$artDirPath/${_artFileName(song.path)}';
-          await File(artPath).writeAsBytes(song.albumArt!);
-        }
-
         jsonList.add({
           'path': song.path,
           'title': song.title,
           'artist': song.artist,
           'album': song.album,
+          'hasAlbumArt': song.hasAlbumArt,
           'lyrics': song.lyrics,
           'durationMs': song.duration?.inMilliseconds,
         });
@@ -113,6 +105,18 @@ class SongCache {
       print('Saved ${songs.length} songs to cache');
     } catch (e) {
       print('Error saving cache: $e');
+    }
+  }
+
+  /// Save album art bytes to disk (called during metadata scan)
+  static Future<void> saveAlbumArt(String songPath, Uint8List artBytes) async {
+    try {
+      await init();
+      final artDirPath = await _artDir;
+      final artPath = '$artDirPath/${_artFileName(songPath)}';
+      await File(artPath).writeAsBytes(artBytes);
+    } catch (e) {
+      print('Error saving album art: $e');
     }
   }
 

@@ -1,11 +1,9 @@
-import 'dart:typed_data';
-
 class Song {
   final String path;
   final String title;
   final String artist;
   final String? album;
-  final Uint8List? albumArt;
+  final bool hasAlbumArt; // Lightweight flag instead of storing bytes
   final String? lyrics;
   final Duration? duration;
 
@@ -14,7 +12,7 @@ class Song {
     required this.title,
     this.artist = 'Unknown Artist',
     this.album,
-    this.albumArt,
+    this.hasAlbumArt = false,
     this.lyrics,
     this.duration,
   });
@@ -31,7 +29,7 @@ class Song {
     String? title,
     String? artist,
     String? album,
-    Uint8List? albumArt,
+    bool? hasAlbumArt,
     String? lyrics,
     Duration? duration,
   }) {
@@ -40,7 +38,7 @@ class Song {
       title: title ?? this.title,
       artist: artist ?? this.artist,
       album: album ?? this.album,
-      albumArt: albumArt ?? this.albumArt,
+      hasAlbumArt: hasAlbumArt ?? this.hasAlbumArt,
       lyrics: lyrics ?? this.lyrics,
       duration: duration ?? this.duration,
     );

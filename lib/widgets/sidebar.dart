@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class Sidebar extends StatefulWidget {
   final bool isCollapsed;
@@ -90,7 +91,7 @@ class _SidebarState extends State<Sidebar> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   // Menu Toggle
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -100,7 +101,11 @@ class _SidebarState extends State<Sidebar> {
                           : MainAxisAlignment.start,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.menu, color: Colors.white70),
+                          icon: const FaIcon(
+                            FontAwesomeIcons.bars,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
                           onPressed: widget.onToggle,
                         ),
                         if (_isTextInserted)
@@ -137,19 +142,28 @@ class _SidebarState extends State<Sidebar> {
                         children: [
                           if (_isTextInserted) _buildSectionTitle('Pinned'),
                           _buildNavItem(
-                            Icons.home_filled,
+                            FontAwesomeIcons.solidHouse,
                             'Home',
                             isSelected: true,
                           ),
-                          _buildNavItem(Icons.music_note, 'YouTube Music'),
-                          _buildNavItem(Icons.library_music, 'Library'),
+                          _buildNavItem(
+                            FontAwesomeIcons.youtube,
+                            'YouTube Music',
+                          ),
+                          _buildNavItem(
+                            FontAwesomeIcons.recordVinyl,
+                            'Library',
+                          ),
                           const Divider(color: Colors.white10, height: 32),
                           if (_isTextInserted) _buildSectionTitle('Library'),
-                          _buildNavItem(Icons.album, 'Albums'),
-                          _buildNavItem(Icons.music_note_outlined, 'Songs'),
-                          _buildNavItem(Icons.playlist_play, 'Playlists'),
-                          _buildNavItem(Icons.person, 'Artists'),
-                          _buildNavItem(Icons.download_done, 'Downloaded'),
+                          _buildNavItem(FontAwesomeIcons.compactDisc, 'Albums'),
+                          _buildNavItem(FontAwesomeIcons.music, 'Songs'),
+                          _buildNavItem(FontAwesomeIcons.list, 'Playlists'),
+                          _buildNavItem(FontAwesomeIcons.user, 'Artists'),
+                          _buildNavItem(
+                            FontAwesomeIcons.circleCheck,
+                            'Downloaded',
+                          ),
                           const Divider(color: Colors.white10, height: 32),
                           if (_isTextInserted) _buildSectionTitle('Playlists'),
                           const SizedBox(height: 100),
@@ -159,7 +173,7 @@ class _SidebarState extends State<Sidebar> {
                   ),
 
                   // Settings at bottom
-                  _buildNavItem(Icons.settings, 'Settings'),
+                  _buildNavItem(FontAwesomeIcons.gear, 'Settings'),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -172,7 +186,7 @@ class _SidebarState extends State<Sidebar> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 12),
+      padding: const EdgeInsets.only(bottom: 12, left: 12),
       child: Text(
         title,
         style: const TextStyle(
@@ -199,16 +213,18 @@ class _SidebarState extends State<Sidebar> {
           onTap: () {},
           borderRadius: BorderRadius.circular(6),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
             child: Row(
               mainAxisAlignment: widget.isCollapsed
                   ? MainAxisAlignment.center
                   : MainAxisAlignment.start,
               children: [
-                Icon(
+                FaIcon(
                   icon,
-                  color: isSelected ? Colors.black87 : Colors.white70,
-                  size: 20,
+                  color: isSelected
+                      ? Colors.black87
+                      : const Color.fromARGB(255, 252, 231, 172),
+                  size: 18,
                 ),
                 if (_isTextInserted)
                   Expanded(
@@ -216,15 +232,13 @@ class _SidebarState extends State<Sidebar> {
                       duration: const Duration(milliseconds: 200),
                       opacity: _isTextVisible ? 1.0 : 0.0,
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 12),
+                        padding: const EdgeInsets.only(left: 16),
                         child: Text(
                           title,
                           style: TextStyle(
                             color: isSelected ? Colors.black87 : Colors.white70,
-                            fontSize: 14,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.fade,

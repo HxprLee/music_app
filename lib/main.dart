@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'providers/audio_provider.dart';
@@ -59,7 +58,9 @@ class MusicApp extends StatelessWidget {
             secondary: const Color(0xFFFCE7AC),
           ),
           useMaterial3: true,
-          textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+          textTheme: ThemeData.dark().textTheme.apply(
+            fontFamily: 'Iosevka Nerd Font',
+          ),
         ),
         home: const HomeScreen(),
       ),

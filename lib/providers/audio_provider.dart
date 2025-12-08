@@ -36,11 +36,14 @@ class AudioProvider extends ChangeNotifier {
     // Initialize MetadataGod
     MetadataGod.initialize();
 
-    // Listen to playback state
+    // Listen to playback state - only notify on actual state changes
     _audioHandler.playbackState.listen((state) {
+      final wasPlaying = _isPlaying;
       _isPlaying = state.playing;
-      _position = state.position;
-      notifyListeners();
+      // Only notify if playing state actually changed
+      if (wasPlaying != _isPlaying) {
+        notifyListeners();
+      }
     });
 
     // Listen to media item changes
@@ -62,11 +65,18 @@ class AudioProvider extends ChangeNotifier {
     // Load cache first, then scan for new files
     _loadCacheAndScan();
 
-    // Listen to position stream directly for smooth progress
+    // Listen to position stream with throttling for smooth progress
+    // Without throttling, this fires ~60 times/sec causing high CPU usage
     if (_audioHandler is MyAudioHandler) {
+      Duration? lastNotifyPosition;
       _audioHandler.player.positionStream.listen((pos) {
         _position = pos;
-        notifyListeners();
+        // Only notify listeners every 250ms to reduce rebuilds
+        if (lastNotifyPosition == null ||
+            (pos - lastNotifyPosition!).inMilliseconds.abs() >= 250) {
+          lastNotifyPosition = pos;
+          notifyListeners();
+        }
       });
     }
   }
@@ -165,11 +175,22 @@ class AudioProvider extends ChangeNotifier {
               final metadata = await MetadataGod.readMetadata(
                 file: entity.path,
               );
+
+              // Save album art to disk if present
+              bool hasArt = false;
+              if (metadata.picture?.data != null) {
+                await SongCache.saveAlbumArt(
+                  entity.path,
+                  metadata.picture!.data,
+                );
+                hasArt = true;
+              }
+
               song = song.copyWith(
                 title: metadata.title,
                 artist: metadata.artist,
                 album: metadata.album,
-                albumArt: metadata.picture?.data,
+                hasAlbumArt: hasArt,
                 duration: metadata.durationMs != null
                     ? Duration(milliseconds: metadata.durationMs!.toInt())
                     : null,

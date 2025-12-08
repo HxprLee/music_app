@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../services/album_art_cache.dart';
 
 class QuickActionCard extends StatefulWidget {
   final IconData icon;
@@ -20,9 +22,9 @@ class _QuickActionCardState extends State<QuickActionCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: Container(
-        width: 160,
-        height: 80,
-        padding: const EdgeInsets.all(12),
+        width: 150,
+        height: 85,
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: _isHovered
               ? const Color.fromARGB(102, 17, 23, 28)
@@ -34,13 +36,17 @@ class _QuickActionCardState extends State<QuickActionCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(widget.icon, color: Colors.white70, size: 20),
+            FaIcon(
+              widget.icon,
+              color: Color.fromARGB(255, 252, 231, 172),
+              size: 18,
+            ),
             Text(
               widget.label,
               style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w200,
+                color: Color.fromARGB(204, 252, 231, 172),
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -53,7 +59,7 @@ class _QuickActionCardState extends State<QuickActionCard> {
 class SongCard extends StatefulWidget {
   final String title;
   final String artist;
-  final Uint8List? albumArt;
+  final String? songPath; // Use path for lazy loading
   final Color color;
   final VoidCallback? onTap;
 
@@ -61,7 +67,7 @@ class SongCard extends StatefulWidget {
     super.key,
     required this.title,
     required this.artist,
-    this.albumArt,
+    this.songPath,
     required this.color,
     this.onTap,
   });
@@ -72,6 +78,36 @@ class SongCard extends StatefulWidget {
 
 class _SongCardState extends State<SongCard> {
   bool _isHovered = false;
+  Uint8List? _albumArt;
+  bool _artLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAlbumArt();
+  }
+
+  @override
+  void didUpdateWidget(SongCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.songPath != widget.songPath) {
+      _artLoaded = false;
+      _albumArt = null;
+      _loadAlbumArt();
+    }
+  }
+
+  Future<void> _loadAlbumArt() async {
+    if (widget.songPath == null || _artLoaded) return;
+
+    final art = await AlbumArtCache().getArt(widget.songPath!);
+    if (mounted) {
+      setState(() {
+        _albumArt = art;
+        _artLoaded = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -94,18 +130,18 @@ class _SongCardState extends State<SongCard> {
                     decoration: BoxDecoration(
                       color: widget.color,
                       borderRadius: BorderRadius.circular(8),
-                      image: widget.albumArt != null
+                      image: _albumArt != null
                           ? DecorationImage(
-                              image: MemoryImage(widget.albumArt!),
+                              image: MemoryImage(_albumArt!),
                               fit: BoxFit.cover,
                             )
                           : null,
                     ),
-                    child: widget.albumArt == null
+                    child: _albumArt == null
                         ? Center(
-                            child: Icon(
-                              Icons.music_note,
-                              size: 48,
+                            child: FaIcon(
+                              FontAwesomeIcons.music,
+                              size: 36,
                               color: Colors.white.withOpacity(0.5),
                             ),
                           )
@@ -119,10 +155,10 @@ class _SongCardState extends State<SongCard> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Center(
-                          child: Icon(
-                            Icons.play_arrow,
+                          child: FaIcon(
+                            FontAwesomeIcons.play,
                             color: Colors.white,
-                            size: 48,
+                            size: 36,
                           ),
                         ),
                       ),
@@ -135,17 +171,20 @@ class _SongCardState extends State<SongCard> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                  color: Color.fromARGB(255, 252, 231, 172),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 0),
               Text(
                 widget.artist,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                style: TextStyle(
+                  color: Color.fromARGB(204, 252, 231, 172),
+                  fontSize: 14,
+                ),
               ),
             ],
           ),

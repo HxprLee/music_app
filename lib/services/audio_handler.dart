@@ -1,92 +1,127 @@
+import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/song.dart';
+import 'album_art_cache.dart';
 
 class MyAudioHandler extends BaseAudioHandler {
   final _player = AudioPlayer();
   // We'll use the 'queue' behavior subject from BaseAudioHandler to store the playlist
   int _currentIndex = 0;
 
+  // Loading lock to prevent concurrent _playCurrent calls
+  Completer<void>? _loadingCompleter;
+  bool _isDisposed = false;
+
+  // Subscriptions for proper cleanup
+  final List<StreamSubscription> _subscriptions = [];
+
+  // Album art cache
+  final AlbumArtCache _artCache = AlbumArtCache();
+
   MyAudioHandler() {
     _init();
   }
 
+  // Throttle for playback event updates
+  DateTime? _lastPlaybackStateUpdate;
+
   Future<void> _init() async {
-    // Broadcast playback state changes
-    _player.playbackEventStream.listen((PlaybackEvent event) {
-      final playing = _player.playing;
-      playbackState.add(
-        playbackState.value.copyWith(
-          controls: [
-            MediaControl.skipToPrevious,
-            if (playing) MediaControl.pause else MediaControl.play,
-            MediaControl.stop,
-            MediaControl.skipToNext,
-          ],
-          systemActions: const {
-            MediaAction.seek,
-            MediaAction.seekForward,
-            MediaAction.seekBackward,
-          },
-          androidCompactActionIndices: const [0, 1, 3],
-          processingState: const {
-            ProcessingState.idle: AudioProcessingState.idle,
-            ProcessingState.loading: AudioProcessingState.loading,
-            ProcessingState.buffering: AudioProcessingState.buffering,
-            ProcessingState.ready: AudioProcessingState.ready,
-            ProcessingState.completed: AudioProcessingState.completed,
-          }[_player.processingState]!,
-          playing: playing,
-          updatePosition: _player.position,
-          bufferedPosition: _player.bufferedPosition,
-          speed: _player.speed,
-          queueIndex: _currentIndex,
-        ),
-      );
-    });
+    // Broadcast playback state changes (throttled to reduce CPU)
+    _subscriptions.add(
+      _player.playbackEventStream.listen((PlaybackEvent event) {
+        if (_isDisposed) return;
+
+        // Throttle updates to max 4 per second to reduce CPU usage
+        final now = DateTime.now();
+        if (_lastPlaybackStateUpdate != null &&
+            now.difference(_lastPlaybackStateUpdate!).inMilliseconds < 250) {
+          return;
+        }
+        _lastPlaybackStateUpdate = now;
+
+        final playing = _player.playing;
+        playbackState.add(
+          playbackState.value.copyWith(
+            controls: [
+              MediaControl.skipToPrevious,
+              if (playing) MediaControl.pause else MediaControl.play,
+              MediaControl.stop,
+              MediaControl.skipToNext,
+            ],
+            systemActions: const {
+              MediaAction.seek,
+              MediaAction.seekForward,
+              MediaAction.seekBackward,
+            },
+            androidCompactActionIndices: const [0, 1, 3],
+            processingState: const {
+              ProcessingState.idle: AudioProcessingState.idle,
+              ProcessingState.loading: AudioProcessingState.loading,
+              ProcessingState.buffering: AudioProcessingState.buffering,
+              ProcessingState.ready: AudioProcessingState.ready,
+              ProcessingState.completed: AudioProcessingState.completed,
+            }[_player.processingState]!,
+            playing: playing,
+            updatePosition: _player.position,
+            bufferedPosition: _player.bufferedPosition,
+            speed: _player.speed,
+            queueIndex: _currentIndex,
+          ),
+        );
+      }),
+    );
 
     // Propagate processing state to playback state and handle auto-advance
-    _player.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
-        skipToNext();
-      }
-    });
+    _subscriptions.add(
+      _player.processingStateStream.listen((state) {
+        if (_isDisposed) return;
+        if (state == ProcessingState.completed) {
+          skipToNext();
+        }
+      }),
+    );
 
     // Sync duration
-    _player.durationStream.listen((duration) {
-      if (duration != null) {
-        final index = _currentIndex;
-        if (index >= 0 && index < queue.value.length) {
-          final item = queue.value[index];
-          if (item.duration != duration) {
-            // Update the item in the queue
-            final newItem = item.copyWith(duration: duration);
-            queue.value[index] = newItem;
-            // Also update current mediaItem if it matches
-            if (mediaItem.value?.id == item.id) {
-              mediaItem.add(newItem);
+    _subscriptions.add(
+      _player.durationStream.listen((duration) {
+        if (_isDisposed) return;
+        if (duration != null) {
+          final index = _currentIndex;
+          if (index >= 0 && index < queue.value.length) {
+            final item = queue.value[index];
+            if (item.duration != duration) {
+              // Update the item in the queue
+              final newItem = item.copyWith(duration: duration);
+              queue.value[index] = newItem;
+              // Also update current mediaItem if it matches
+              if (mediaItem.value?.id == item.id) {
+                mediaItem.add(newItem);
+              }
             }
           }
         }
-      }
-    });
+      }),
+    );
   }
 
   Future<void> setPlaylist(List<Song> songs) async {
     print('Setting playlist with ${songs.length} songs');
-    // Convert songs to MediaItems
-    final mediaItems = songs
-        .map(
-          (song) => MediaItem(
-            id: song.path,
-            album: song.album ?? "Unknown Album",
-            title: song.title,
-            artist: song.artist,
-            artUri: null, // Can add art URI if available
-            extras: {'path': song.path},
-          ),
-        )
-        .toList();
+
+    // Initialize album art cache
+    await _artCache.init();
+
+    // Convert songs to MediaItems (without art URIs - loaded lazily when played)
+    final mediaItems = songs.map((song) {
+      return MediaItem(
+        id: song.path,
+        album: song.album ?? "Unknown Album",
+        title: song.title,
+        artist: song.artist,
+        artUri: null, // Art URI loaded lazily when song plays
+        extras: {'path': song.path, 'hasAlbumArt': song.hasAlbumArt},
+      );
+    }).toList();
 
     // Update the queue
     queue.add(mediaItems);
@@ -95,8 +130,6 @@ class MyAudioHandler extends BaseAudioHandler {
     // Don't auto-play, just be ready
     if (mediaItems.isNotEmpty) {
       mediaItem.add(mediaItems[0]);
-      // Preload the first song? Optional.
-      // await _player.setAudioSource(AudioSource.uri(Uri.file(mediaItems[0].id)));
     }
   }
 
@@ -162,21 +195,88 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 
   Future<void> _playCurrent() async {
-    if (queue.value.isEmpty) return;
+    if (_isDisposed || queue.value.isEmpty) return;
 
-    final item = queue.value[_currentIndex];
+    // Cancel any ongoing load operation
+    if (_loadingCompleter != null && !_loadingCompleter!.isCompleted) {
+      // Signal that we're interrupting
+      _loadingCompleter!.complete();
+    }
+
+    // Create a new completer for this load operation
+    final thisLoad = Completer<void>();
+    _loadingCompleter = thisLoad;
+
+    var item = queue.value[_currentIndex];
+
+    // Lazily load art URI for MPRIS if this song has album art
+    if (item.artUri == null && item.extras?['hasAlbumArt'] == true) {
+      final artUri = await _artCache.getArtUri(item.id);
+      if (artUri != null) {
+        // Create updated item with art URI
+        item = item.copyWith(artUri: artUri);
+        // Update queue with the updated item
+        final updatedQueue = List<MediaItem>.from(queue.value);
+        updatedQueue[_currentIndex] = item;
+        queue.add(updatedQueue);
+      }
+    }
+
     mediaItem.add(item);
 
     try {
+      // Stop current playback first to prevent overlap
+      await _player.stop();
+
+      // Check if we were cancelled before loading
+      if (thisLoad.isCompleted || _isDisposed) return;
+
       await _player.setAudioSource(
         AudioSource.uri(Uri.file(item.id), tag: item),
       );
+
+      // Check if we were cancelled after loading
+      if (thisLoad.isCompleted || _isDisposed) return;
+
       await _player.play();
+    } on PlayerInterruptedException catch (_) {
+      // Loading was interrupted by a new load request - this is expected
+      print("Audio loading interrupted (switching tracks)");
     } catch (e) {
-      print("Error playing audio: $e");
+      // Handle "Loading interrupted" from just_audio
+      if (e.toString().contains('Loading interrupted')) {
+        print("Audio loading interrupted (switching tracks)");
+      } else {
+        print("Error playing audio: $e");
+      }
+    } finally {
+      // Only complete if this is still the active load
+      if (_loadingCompleter == thisLoad && !thisLoad.isCompleted) {
+        thisLoad.complete();
+      }
     }
   }
 
   // Expose player for direct access if needed (though discouraged)
   AudioPlayer get player => _player;
+
+  /// Dispose of resources to prevent native callback crashes
+  Future<void> dispose() async {
+    if (_isDisposed) return;
+    _isDisposed = true;
+
+    // Cancel any ongoing load
+    if (_loadingCompleter != null && !_loadingCompleter!.isCompleted) {
+      _loadingCompleter!.complete();
+    }
+
+    // Cancel all subscriptions
+    for (final sub in _subscriptions) {
+      await sub.cancel();
+    }
+    _subscriptions.clear();
+
+    // Dispose the player
+    await _player.dispose();
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import '../providers/audio_provider.dart';
 import 'cards.dart';
@@ -16,9 +17,9 @@ class MainContent extends StatelessWidget {
           child: Row(
             children: [
               // Navigation Arrows
-              _buildNavIcon(Icons.chevron_left),
+              _buildNavIcon(FontAwesomeIcons.chevronLeft),
               const SizedBox(width: 8),
-              _buildNavIcon(Icons.chevron_right),
+              _buildNavIcon(FontAwesomeIcons.chevronRight),
 
               const SizedBox(width: 24),
 
@@ -33,7 +34,11 @@ class MainContent extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: [
-                      const Icon(Icons.search, color: Colors.white54, size: 20),
+                      const FaIcon(
+                        FontAwesomeIcons.magnifyingGlass,
+                        color: Colors.white54,
+                        size: 16,
+                      ),
                       const SizedBox(width: 12),
                       Text(
                         'Search songs, albums, artists',
@@ -47,11 +52,11 @@ class MainContent extends StatelessWidget {
               const SizedBox(width: 24),
 
               // Window Controls
-              _buildWindowControl(Icons.keyboard_arrow_down),
+              _buildWindowControl(FontAwesomeIcons.minus),
               const SizedBox(width: 8),
-              _buildWindowControl(Icons.keyboard_arrow_up),
+              _buildWindowControl(FontAwesomeIcons.windowMaximize),
               const SizedBox(width: 8),
-              _buildWindowControl(Icons.close),
+              _buildWindowControl(FontAwesomeIcons.xmark),
             ],
           ),
         ),
@@ -72,8 +77,8 @@ class MainContent extends StatelessWidget {
                     const Text(
                       'Home',
                       style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 46,
+                        fontWeight: FontWeight.w500,
                         color: Color(0xFFFCE7AC),
                       ),
                     ),
@@ -81,37 +86,37 @@ class MainContent extends StatelessWidget {
 
                     // Quick Actions - Horizontal Scrollable
                     SizedBox(
-                      height: 90,
+                      height: 85,
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         children: const [
                           QuickActionCard(
-                            icon: Icons.favorite,
+                            icon: FontAwesomeIcons.solidHeart,
                             label: 'Favorites',
                           ),
-                          SizedBox(width: 16),
+                          SizedBox(width: 8),
                           QuickActionCard(
-                            icon: Icons.history,
+                            icon: FontAwesomeIcons.clockRotateLeft,
                             label: 'Recently played',
                           ),
-                          SizedBox(width: 16),
+                          SizedBox(width: 8),
                           QuickActionCard(
-                            icon: Icons.repeat,
+                            icon: FontAwesomeIcons.repeat,
                             label: 'Most played',
                           ),
-                          SizedBox(width: 16),
+                          SizedBox(width: 8),
                           QuickActionCard(
-                            icon: Icons.playlist_play,
+                            icon: FontAwesomeIcons.list,
                             label: 'Playlists',
                           ),
-                          SizedBox(width: 16),
+                          SizedBox(width: 8),
                           QuickActionCard(
-                            icon: Icons.shuffle,
+                            icon: FontAwesomeIcons.shuffle,
                             label: 'Shuffle',
                           ),
-                          SizedBox(width: 16),
+                          SizedBox(width: 8),
                           QuickActionCard(
-                            icon: Icons.add,
+                            icon: FontAwesomeIcons.plus,
                             label: 'Add shortcuts',
                           ),
                         ],
@@ -125,7 +130,10 @@ class MainContent extends StatelessWidget {
                       children: [
                         const Text(
                           "Recently added songs",
-                          style: TextStyle(fontSize: 16, color: Colors.white70),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Color.fromARGB(204, 252, 231, 172),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         if (isScanning)
@@ -139,7 +147,7 @@ class MainContent extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     SizedBox(
                       height: 240,
                       child: recentlyAdded.isEmpty
@@ -159,7 +167,7 @@ class MainContent extends StatelessWidget {
                                 return SongCard(
                                   title: song.title,
                                   artist: song.artist,
-                                  albumArt: song.albumArt,
+                                  songPath: song.path,
                                   color: _getColorForIndex(index),
                                   onTap: () => audioProvider.playSong(song),
                                 );
@@ -172,9 +180,12 @@ class MainContent extends StatelessWidget {
                     // Recently Played
                     const Text(
                       "Recently played",
-                      style: TextStyle(fontSize: 16, color: Colors.white70),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color.fromARGB(204, 252, 231, 172),
+                      ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     SizedBox(
                       height: 240,
                       child: recentlyPlayed.isEmpty
@@ -192,7 +203,7 @@ class MainContent extends StatelessWidget {
                                 return SongCard(
                                   title: song.title,
                                   artist: song.artist,
-                                  albumArt: song.albumArt,
+                                  songPath: song.path,
                                   color: _getColorForIndex(index + 3),
                                   onTap: () => audioProvider.playSong(song),
                                 );
@@ -217,12 +228,12 @@ class MainContent extends StatelessWidget {
         color: Color(0xFF282C34),
         shape: BoxShape.circle,
       ),
-      child: Icon(icon, color: Colors.white54, size: 18),
+      child: Center(child: FaIcon(icon, color: Colors.white54, size: 14)),
     );
   }
 
   Widget _buildWindowControl(IconData icon) {
-    return Icon(icon, color: Colors.white54, size: 20);
+    return FaIcon(icon, color: Colors.white54, size: 16);
   }
 
   Color _getColorForIndex(int index) {
