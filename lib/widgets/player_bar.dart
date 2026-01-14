@@ -1,9 +1,11 @@
-import 'dart:typed_data';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:provider/provider.dart';
-import '../providers/audio_provider.dart';
+import 'package:signals/signals_flutter.dart';
+import '../signals/audio_signal.dart';
 import '../services/album_art_cache.dart';
+import '../screens/now_playing_screen.dart';
 
 class PlayerBar extends StatefulWidget {
   const PlayerBar({super.key});
@@ -15,7 +17,7 @@ class PlayerBar extends StatefulWidget {
 class _PlayerBarState extends State<PlayerBar>
     with SingleTickerProviderStateMixin {
   bool _showPlayPauseIcon = false;
-  Uint8List? _currentAlbumArt;
+  File? _currentAlbumArt;
   String? _currentSongPath;
 
   void _togglePlayPauseIcon() {
@@ -44,73 +46,74 @@ class _PlayerBarState extends State<PlayerBar>
     }
   }
 
+  bool get isDesktop =>
+      !kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS);
+
   @override
   Widget build(BuildContext context) {
+    final isMobile = !isDesktop;
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
-        final isCompact = availableWidth < 650;
+        final isCompact = isMobile || availableWidth < 700;
 
-        return Consumer<AudioProvider>(
-          builder: (context, audioProvider, child) {
-            final currentSong = audioProvider.currentSong;
-            final isPlaying = audioProvider.isPlaying;
-            final position = audioProvider.position;
-            final duration = audioProvider.duration;
+        return Watch((context) {
+          final currentSong = audioSignal.currentSong.value;
+          final isPlaying = audioSignal.isPlaying.value;
+          final position = audioSignal.position.value;
+          final duration = audioSignal.duration.value;
 
-            // Load album art when song changes
-            if (currentSong != null) {
-              _loadAlbumArt(currentSong.path);
-            }
+          // Load album art when song changes
+          if (currentSong != null) {
+            _loadAlbumArt(currentSong.path);
+          }
 
-            double progress = 0.0;
-            if (duration.inMilliseconds > 0) {
-              progress = position.inMilliseconds / duration.inMilliseconds;
-            }
+          double progress = 0.0;
+          if (duration.inMilliseconds > 0) {
+            progress = position.inMilliseconds / duration.inMilliseconds;
+          }
 
-            return AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.1),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.1),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            layoutBuilder: (currentChild, previousChildren) {
+              return Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  ...previousChildren,
+                  if (currentChild != null) currentChild,
+                ],
+              );
+            },
+            child: isCompact
+                ? _buildCompactPlayer(
+                    key: const ValueKey('compact'),
+                    currentSong: currentSong,
+                    isPlaying: isPlaying,
+                    progress: progress,
+                    isMobile: isMobile,
+                  )
+                : _buildFullPlayer(
+                    key: const ValueKey('full'),
+                    currentSong: currentSong,
+                    isPlaying: isPlaying,
+                    progress: progress,
                   ),
-                );
-              },
-              layoutBuilder: (currentChild, previousChildren) {
-                return Stack(
-                  alignment: Alignment.bottomCenter,
-                  children: [
-                    ...previousChildren,
-                    if (currentChild != null) currentChild,
-                  ],
-                );
-              },
-              child: isCompact
-                  ? _buildCompactPlayer(
-                      key: const ValueKey('compact'),
-                      currentSong: currentSong,
-                      isPlaying: isPlaying,
-                      progress: progress,
-                      audioProvider: audioProvider,
-                    )
-                  : _buildFullPlayer(
-                      key: const ValueKey('full'),
-                      currentSong: currentSong,
-                      isPlaying: isPlaying,
-                      progress: progress,
-                      audioProvider: audioProvider,
-                    ),
-            );
-          },
-        );
+          );
+        });
       },
     );
   }
@@ -139,27 +142,36 @@ class _PlayerBarState extends State<PlayerBar>
               ),
             ),
           ),
-          ClipOval(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: 42,
-              height: 42,
-              color: Colors.grey[800],
-              child: _currentAlbumArt != null
-                  ? Image.memory(_currentAlbumArt!, fit: BoxFit.cover)
-                  : (showPlayPauseOnTap && _showPlayPauseIcon)
-                  ? FaIcon(
-                      isPlaying
-                          ? FontAwesomeIcons.pause
-                          : FontAwesomeIcons.play,
-                      color: const Color(0xFFFCE7AC),
-                      size: 16,
-                    )
-                  : const FaIcon(
-                      FontAwesomeIcons.music,
-                      color: Colors.white54,
-                      size: 16,
-                    ),
+          Hero(
+            tag: 'player-artwork',
+            child: ClipOval(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: 42,
+                height: 42,
+                color: Colors.grey[800],
+                child: _currentAlbumArt != null
+                    ? Image(
+                        image: ResizeImage(
+                          FileImage(_currentAlbumArt!),
+                          width: 100, // Optimize memory: decode at smaller size
+                        ),
+                        fit: BoxFit.cover,
+                      )
+                    : (showPlayPauseOnTap && _showPlayPauseIcon)
+                    ? FaIcon(
+                        isPlaying
+                            ? FontAwesomeIcons.pause
+                            : FontAwesomeIcons.play,
+                        color: const Color(0xFFFCE7AC),
+                        size: 16,
+                      )
+                    : const FaIcon(
+                        FontAwesomeIcons.music,
+                        color: Colors.white54,
+                        size: 16,
+                      ),
+              ),
             ),
           ),
         ],
@@ -206,61 +218,75 @@ class _PlayerBarState extends State<PlayerBar>
     required currentSong,
     required bool isPlaying,
     required double progress,
-    required AudioProvider audioProvider,
+    bool isMobile = false,
   }) {
-    return Container(
-      key: key,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(50),
-        child: Container(
-          height: 80,
-          margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color.fromARGB(170, 17, 23, 28),
-            borderRadius: BorderRadius.circular(50),
-            border: Border.all(
-              color: const Color.fromARGB(38, 255, 239, 175),
-              width: 2,
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (context) => const NowPlayingScreen()),
+        );
+      },
+      child: Container(
+        key: key,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(50),
+          child: Container(
+            height: 80,
+            margin: EdgeInsets.fromLTRB(
+              isMobile ? 12 : 24,
+              0,
+              isMobile ? 12 : 24,
+              isMobile ? 12 : 24,
             ),
-          ),
-          child: Row(
-            children: [
-              // Album Art with Circular Progress - Acts as Play/Pause button
-              _buildAlbumArtWithProgress(
-                currentSong: currentSong,
-                progress: progress,
-                isPlaying: isPlaying,
-                showPlayPauseOnTap: true,
-                onTap: () {
-                  _togglePlayPauseIcon();
-                  if (isPlaying) {
-                    audioProvider.pause();
-                  } else {
-                    audioProvider.play();
-                  }
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color.fromARGB(170, 17, 23, 28),
+              borderRadius: BorderRadius.circular(50),
+              border: Border.all(
+                color: const Color.fromARGB(38, 255, 239, 175),
+                width: 2,
+              ),
+            ),
+            child: Row(
+              children: [
+                // Album Art with Circular Progress - Acts as Play/Pause button
+                _buildAlbumArtWithProgress(
+                  currentSong: currentSong,
+                  progress: progress,
+                  isPlaying: isPlaying,
+                  showPlayPauseOnTap: true,
+                  onTap: () {
+                    _togglePlayPauseIcon();
+                    if (isPlaying) {
+                      audioSignal.pause();
+                    } else {
+                      audioSignal.play();
+                    }
+                  },
+                ),
+                const SizedBox(width: 14),
+                // Song Info
+                Expanded(child: _buildSongInfo(currentSong: currentSong)),
+                const SizedBox(width: 14),
+                // Compact Controls
+                if (!isMobile) ...{
+                  _buildControlButton(
+                    icon: FontAwesomeIcons.ellipsisVertical,
+                    onPressed: () {},
+                  ),
+                  const SizedBox(width: 10),
                 },
-              ),
-              const SizedBox(width: 14),
-              // Song Info
-              Expanded(child: _buildSongInfo(currentSong: currentSong)),
-              const SizedBox(width: 14),
-              // Compact Controls
-              _buildControlButton(
-                icon: FontAwesomeIcons.ellipsisVertical,
-                onPressed: () {},
-              ),
-              const SizedBox(width: 10),
-              _buildControlButton(
-                icon: FontAwesomeIcons.backwardStep,
-                onPressed: audioProvider.skipPrevious,
-              ),
-              const SizedBox(width: 10),
-              _buildControlButton(
-                icon: FontAwesomeIcons.forwardStep,
-                onPressed: audioProvider.skipNext,
-              ),
-            ],
+                _buildControlButton(
+                  icon: FontAwesomeIcons.backwardStep,
+                  onPressed: audioSignal.skipPrevious,
+                ),
+                const SizedBox(width: 10),
+                _buildControlButton(
+                  icon: FontAwesomeIcons.forwardStep,
+                  onPressed: audioSignal.skipNext,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -272,12 +298,11 @@ class _PlayerBarState extends State<PlayerBar>
     required currentSong,
     required bool isPlaying,
     required double progress,
-    required AudioProvider audioProvider,
   }) {
     return Container(
       key: key,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900),
+        constraints: const BoxConstraints(maxWidth: 950),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(50),
           child: Container(
@@ -300,7 +325,7 @@ class _PlayerBarState extends State<PlayerBar>
                   children: [
                     _buildControlButton(
                       icon: FontAwesomeIcons.backwardStep,
-                      onPressed: audioProvider.skipPrevious,
+                      onPressed: audioSignal.skipPrevious,
                     ),
                     const SizedBox(width: 10),
                     _buildControlButton(
@@ -309,16 +334,16 @@ class _PlayerBarState extends State<PlayerBar>
                           : FontAwesomeIcons.play,
                       onPressed: () {
                         if (isPlaying) {
-                          audioProvider.pause();
+                          audioSignal.pause();
                         } else {
-                          audioProvider.play();
+                          audioSignal.play();
                         }
                       },
                     ),
                     const SizedBox(width: 10),
                     _buildControlButton(
                       icon: FontAwesomeIcons.forwardStep,
-                      onPressed: audioProvider.skipNext,
+                      onPressed: audioSignal.skipNext,
                     ),
                   ],
                 ),
@@ -327,9 +352,7 @@ class _PlayerBarState extends State<PlayerBar>
 
                 // Center Info (Circular Progress + Art, Title, Artist)
                 Expanded(
-                  flex: 3,
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       _buildAlbumArtWithProgress(
                         currentSong: currentSong,
@@ -374,7 +397,10 @@ class _PlayerBarState extends State<PlayerBar>
                     _buildControlButton(
                       icon: FontAwesomeIcons.shuffle,
                       size: 22,
-                      onPressed: () {},
+                      color: audioSignal.isShuffleMode.value
+                          ? const Color(0xFFFCE7AC)
+                          : const Color.fromARGB(100, 252, 231, 172),
+                      onPressed: audioSignal.toggleShuffle,
                     ),
                     const SizedBox(width: 10),
                     _buildControlButton(
@@ -396,9 +422,10 @@ class _PlayerBarState extends State<PlayerBar>
     required IconData icon,
     required VoidCallback onPressed,
     double size = 24,
+    Color? color,
   }) {
     return IconButton(
-      icon: FaIcon(icon, color: const Color(0xFFFCE7AC), size: size),
+      icon: FaIcon(icon, color: color ?? const Color(0xFFFCE7AC), size: size),
       onPressed: onPressed,
     );
   }

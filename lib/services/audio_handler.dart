@@ -8,6 +8,8 @@ class MyAudioHandler extends BaseAudioHandler {
   final _player = AudioPlayer();
   // We'll use the 'queue' behavior subject from BaseAudioHandler to store the playlist
   int _currentIndex = 0;
+  List<int> _shuffledIndices = [];
+  AudioServiceShuffleMode _shuffleMode = AudioServiceShuffleMode.none;
 
   // Loading lock to prevent concurrent _playCurrent calls
   Completer<void>? _loadingCompleter;
@@ -24,23 +26,16 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 
   // Throttle for playback event updates
-  DateTime? _lastPlaybackStateUpdate;
 
   Future<void> _init() async {
-    // Broadcast playback state changes (throttled to reduce CPU)
+    // Broadcast playback state changes (throttled to reduce CPU for position updates, but immediate for play/pause)
     _subscriptions.add(
-      _player.playbackEventStream.listen((PlaybackEvent event) {
+      _player.playerStateStream.listen((state) {
         if (_isDisposed) return;
 
-        // Throttle updates to max 4 per second to reduce CPU usage
-        final now = DateTime.now();
-        if (_lastPlaybackStateUpdate != null &&
-            now.difference(_lastPlaybackStateUpdate!).inMilliseconds < 250) {
-          return;
-        }
-        _lastPlaybackStateUpdate = now;
+        final playing = state.playing;
+        final processingState = state.processingState;
 
-        final playing = _player.playing;
         playbackState.add(
           playbackState.value.copyWith(
             controls: [
@@ -61,12 +56,13 @@ class MyAudioHandler extends BaseAudioHandler {
               ProcessingState.buffering: AudioProcessingState.buffering,
               ProcessingState.ready: AudioProcessingState.ready,
               ProcessingState.completed: AudioProcessingState.completed,
-            }[_player.processingState]!,
+            }[processingState]!,
             playing: playing,
             updatePosition: _player.position,
             bufferedPosition: _player.bufferedPosition,
             speed: _player.speed,
             queueIndex: _currentIndex,
+            shuffleMode: _shuffleMode,
           ),
         );
       }),
@@ -126,6 +122,10 @@ class MyAudioHandler extends BaseAudioHandler {
     // Update the queue
     queue.add(mediaItems);
     _currentIndex = 0;
+    _shuffledIndices = [];
+    if (_shuffleMode == AudioServiceShuffleMode.all) {
+      _generateShuffledIndices();
+    }
 
     // Don't auto-play, just be ready
     if (mediaItems.isNotEmpty) {
@@ -146,32 +146,70 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> pause() => _player.pause();
 
   @override
-  Future<void> stop() => _player.stop();
+  Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {
+    _shuffleMode = shuffleMode;
+    if (shuffleMode == AudioServiceShuffleMode.all) {
+      _generateShuffledIndices();
+    } else {
+      _shuffledIndices = [];
+    }
+    // Update playback state to reflect shuffle mode change
+    playbackState.add(playbackState.value.copyWith(shuffleMode: shuffleMode));
+  }
+
+  void _generateShuffledIndices() {
+    final count = queue.value.length;
+    _shuffledIndices = List.generate(count, (i) => i);
+    _shuffledIndices.shuffle();
+
+    // Ensure current song is at the current position in shuffled list if possible
+    // or just let it be random. Usually, if you toggle shuffle while playing,
+    // you want the current song to stay, and the NEXT songs to be random.
+    if (count > 0) {
+      _shuffledIndices.remove(_currentIndex);
+      _shuffledIndices.insert(0, _currentIndex);
+    }
+  }
+
+  int _getNextIndex() {
+    if (_shuffleMode == AudioServiceShuffleMode.none ||
+        _shuffledIndices.isEmpty) {
+      return (_currentIndex + 1) % queue.value.length;
+    }
+    final currentShuffledPos = _shuffledIndices.indexOf(_currentIndex);
+    if (currentShuffledPos != -1 &&
+        currentShuffledPos < _shuffledIndices.length - 1) {
+      return _shuffledIndices[currentShuffledPos + 1];
+    }
+    return _shuffledIndices[0]; // Loop back
+  }
+
+  int _getPreviousIndex() {
+    if (_shuffleMode == AudioServiceShuffleMode.none ||
+        _shuffledIndices.isEmpty) {
+      return (_currentIndex - 1 + queue.value.length) % queue.value.length;
+    }
+    final currentShuffledPos = _shuffledIndices.indexOf(_currentIndex);
+    if (currentShuffledPos != -1 && currentShuffledPos > 0) {
+      return _shuffledIndices[currentShuffledPos - 1];
+    }
+    return _shuffledIndices.last; // Loop back
+  }
 
   @override
   Future<void> skipToNext() async {
     if (queue.value.isEmpty) return;
-
-    if (_currentIndex < queue.value.length - 1) {
-      _currentIndex++;
-    } else {
-      _currentIndex = 0; // Loop back to start
-    }
+    _currentIndex = _getNextIndex();
     await _playCurrent();
   }
 
   @override
   Future<void> skipToPrevious() async {
     if (queue.value.isEmpty) return;
-
-    if (_currentIndex > 0) {
-      _currentIndex--;
-    } else {
-      _currentIndex = queue.value.length - 1; // Loop to end
-    }
+    _currentIndex = _getPreviousIndex();
     await _playCurrent();
   }
 

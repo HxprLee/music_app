@@ -71,6 +71,7 @@ class SongCache {
             duration: json['durationMs'] != null
                 ? Duration(milliseconds: json['durationMs'])
                 : null,
+            bitrate: json['bitrate'],
           ),
         );
       }
@@ -97,6 +98,7 @@ class SongCache {
           'hasAlbumArt': song.hasAlbumArt,
           'lyrics': song.lyrics,
           'durationMs': song.duration?.inMilliseconds,
+          'bitrate': song.bitrate,
         });
       }
 

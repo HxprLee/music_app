@@ -24,3 +24,8 @@ plugins {
 }
 
 include(":app")
+
+gradle.settingsEvaluated {
+    settings.rootProject.children.removeIf { it.name == "flutter_discord_rpc" }
+}
+

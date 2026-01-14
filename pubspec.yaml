@@ -23,6 +23,12 @@ dependencies:
   just_audio_media_kit: ^2.1.0
   media_kit_libs_linux: ^1.2.1
   font_awesome_flutter: ^10.12.0
+  http: ^1.6.0
+  flutter_discord_rpc: ^1.1.0
+  shared_preferences: ^2.2.2
+  go_router: ^17.0.1
+  signals: ^6.3.0
+  signals_flutter: ^6.3.0
 
 dev_dependencies:
   flutter_test:

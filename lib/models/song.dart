@@ -6,6 +6,7 @@ class Song {
   final bool hasAlbumArt; // Lightweight flag instead of storing bytes
   final String? lyrics;
   final Duration? duration;
+  final int? bitrate; // in kbps
 
   Song({
     required this.path,
@@ -15,6 +16,7 @@ class Song {
     this.hasAlbumArt = false,
     this.lyrics,
     this.duration,
+    this.bitrate,
   });
 
   // Extract title from filename
@@ -32,6 +34,7 @@ class Song {
     bool? hasAlbumArt,
     String? lyrics,
     Duration? duration,
+    int? bitrate,
   }) {
     return Song(
       path: path,
@@ -41,6 +44,7 @@ class Song {
       hasAlbumArt: hasAlbumArt ?? this.hasAlbumArt,
       lyrics: lyrics ?? this.lyrics,
       duration: duration ?? this.duration,
+      bitrate: bitrate ?? this.bitrate,
     );
   }
 }

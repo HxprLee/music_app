@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -12,12 +11,8 @@ class AlbumArtCache {
   factory AlbumArtCache() => _instance;
   AlbumArtCache._internal();
 
-  // LRU cache with max 20 entries (~20MB max)
-  static const int _maxCacheSize = 20;
-  final LinkedHashMap<String, Uint8List> _memoryCache = LinkedHashMap();
-
   // Pending loads to avoid duplicate requests
-  final Map<String, Future<Uint8List?>> _pendingLoads = {};
+  final Map<String, Future<File?>> _pendingLoads = {};
 
   // Directory paths
   String? _artDirPath;
@@ -46,17 +41,9 @@ class AlbumArtCache {
     return file.exists();
   }
 
-  /// Get album art for a song (from memory cache, disk, or extract)
-  Future<Uint8List?> getArt(String songPath) async {
+  /// Get album art file for a song (from disk or extract)
+  Future<File?> getArt(String songPath) async {
     await init();
-
-    // Check memory cache first
-    if (_memoryCache.containsKey(songPath)) {
-      // Move to end (most recently used)
-      final art = _memoryCache.remove(songPath)!;
-      _memoryCache[songPath] = art;
-      return art;
-    }
 
     // Check if already loading
     if (_pendingLoads.containsKey(songPath)) {
@@ -68,28 +55,20 @@ class AlbumArtCache {
     _pendingLoads[songPath] = loadFuture;
 
     try {
-      final art = await loadFuture;
-      if (art != null) {
-        _addToCache(songPath, art);
-      }
-      return art;
+      return await loadFuture;
     } finally {
       _pendingLoads.remove(songPath);
     }
   }
 
   /// Load art from disk or extract from audio file
-  Future<Uint8List?> _loadArt(String songPath) async {
+  Future<File?> _loadArt(String songPath) async {
     final artPath = _getArtPath(songPath);
     final artFile = File(artPath);
 
     // Try loading from disk cache
     if (await artFile.exists()) {
-      try {
-        return await artFile.readAsBytes();
-      } catch (e) {
-        debugPrint('Error reading art from disk: $e');
-      }
+      return artFile;
     }
 
     // Fall back to extracting from audio file
@@ -99,7 +78,7 @@ class AlbumArtCache {
         final art = metadata.picture!.data;
         // Cache to disk for future use
         await _saveArtToDisk(songPath, art);
-        return art;
+        return artFile;
       }
     } catch (e) {
       debugPrint('Error extracting art from $songPath: $e');
@@ -116,15 +95,6 @@ class AlbumArtCache {
     } catch (e) {
       debugPrint('Error saving art to disk: $e');
     }
-  }
-
-  /// Add art to memory cache with LRU eviction
-  void _addToCache(String songPath, Uint8List art) {
-    // Remove oldest entries if cache is full
-    while (_memoryCache.length >= _maxCacheSize) {
-      _memoryCache.remove(_memoryCache.keys.first);
-    }
-    _memoryCache[songPath] = art;
   }
 
   /// Get art file URI for MPRIS (returns file path, not bytes)
@@ -152,18 +122,10 @@ class AlbumArtCache {
     return null;
   }
 
-  /// Clear memory cache (disk cache remains)
-  void clearMemoryCache() {
-    _memoryCache.clear();
-  }
-
   /// Preload art for a list of songs (e.g., visible songs)
   Future<void> preloadArt(List<String> songPaths) async {
     for (final path in songPaths.take(10)) {
-      // Preload up to 10
-      if (!_memoryCache.containsKey(path)) {
-        getArt(path); // Fire and forget
-      }
+      getArt(path); // Fire and forget
     }
   }
 }
