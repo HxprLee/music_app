@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:signals/signals_flutter.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/morphing_player.dart';
+import '../widgets/window_title_bar.dart';
 import '../signals/audio_signal.dart';
 
 /// Shell widget that wraps all routes with common UI elements:
@@ -23,6 +24,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _playerKey = GlobalKey();
   bool _isSidebarCollapsed = false;
   double? _lastWidth;
 
@@ -118,46 +120,107 @@ class _HomeShellState extends State<HomeShell> {
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOutCubic,
               left: contentLeftOffset,
-              top: 0,
+              top: isDesktop ? 80 : 0, // Offset for title bar height
               right: 0,
               bottom: 0,
               child: SafeArea(child: widget.child),
             ),
 
-            // Sidebar (Desktop only) - Moved to top layer
-            if (!isMobile)
+            // Sidebar and MorphingPlayer with dynamic Z-index
+            Positioned.fill(
+              child: Watch((context) {
+                final expansion = audioSignal.playerExpansion.value;
+                final isExpanded = expansion >= 0.5;
+
+                final sidebar = !isMobile
+                    ? Positioned(
+                        key: const ValueKey('sidebar'),
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        child: Sidebar(
+                          isCollapsed: _isSidebarCollapsed,
+                          onToggle: _toggleSidebar,
+                        ),
+                      )
+                    : const SizedBox.shrink();
+
+                final player = MorphingPlayer(
+                  key: _playerKey,
+                  leftOffset: contentLeftOffset,
+                  bottomOffset: 0.0,
+                );
+
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: isExpanded ? [sidebar, player] : [player, sidebar],
+                );
+              }),
+            ),
+
+            // Title Bar (Moved to top layer)
+            if (isDesktop)
               Positioned(
-                left: 0,
                 top: 0,
-                bottom: 0,
-                child: Sidebar(
-                  isCollapsed: _isSidebarCollapsed,
-                  onToggle: _toggleSidebar,
-                ),
+                left: 0,
+                right: 0,
+                height: 80, // Match design height
+                child: WindowTitleBar(leftPadding: contentLeftOffset),
               ),
 
-            // Morphing Player - Moved to end of stack to be on top of everything
-            MorphingPlayer(leftOffset: contentLeftOffset),
+            // Scanning Indicator
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Watch((context) {
+                if (audioSignal.isScanning.value) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color(0xFFFCE7AC),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Scanning...',
+                          style: TextStyle(
+                            color: Color(0xFFFCE7AC),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              }),
+            ),
           ],
         ),
         bottomNavigationBar: isMobile
             ? Watch((context) {
                 final expansion = audioSignal.playerExpansion.value;
-                final height = 80 * (1 - expansion);
-
-                return Container(
-                  height: height,
-                  color: const Color(0xFF11171C),
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.topCenter,
-                      maxHeight: 80,
-                      minHeight: 80,
-                      child: Theme(
-                        data: Theme.of(
-                          context,
-                        ).copyWith(canvasColor: const Color(0xFF11171C)),
-                        child: BottomNavigationBar(
+                return Opacity(
+                  opacity: (1 - expansion * 2).clamp(0.0, 1.0),
+                  child: expansion > 0.5
+                      ? const SizedBox.shrink()
+                      : BottomNavigationBar(
                           currentIndex: _getSelectedIndex(location),
                           onTap: (index) {
                             switch (index) {
@@ -201,9 +264,6 @@ class _HomeShellState extends State<HomeShell> {
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
                 );
               })
             : null,

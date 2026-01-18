@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:signals/signals_flutter.dart';
 import '../signals/settings_signal.dart';
+import '../signals/audio_signal.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -153,6 +155,177 @@ class SettingsScreen extends StatelessWidget {
                 ),
               );
             }),
+
+            // Window Settings (Desktop only)
+            if (!MediaQuery.of(context).size.width.isNegative &&
+                (Platform.isLinux ||
+                    Platform.isWindows ||
+                    Platform.isMacOS)) ...[
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(170, 17, 23, 28),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color.fromARGB(38, 255, 239, 175),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Window',
+                      style: TextStyle(
+                        color: Color(0xFFFCE7AC),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Manage window behavior and appearance',
+                      style: TextStyle(color: Colors.white54, fontSize: 14),
+                    ),
+                    const SizedBox(height: 20),
+                    Watch((context) {
+                      return SwitchListTile(
+                        title: const Text(
+                          'Custom Window Controls',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        subtitle: const Text(
+                          'Use custom close, minimize, and maximize buttons',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                        value: settingsSignal.useCustomWindowControls.value,
+                        onChanged: (value) =>
+                            settingsSignal.updateCustomWindowControls(value),
+                        activeColor: const Color(0xFFFCE7AC),
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    }),
+                    Watch((context) {
+                      return SwitchListTile(
+                        title: const Text(
+                          'Single Instance',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        subtitle: const Text(
+                          'Only allow one instance of the app to run',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                        value: settingsSignal.useSingleInstance.value,
+                        onChanged: (value) =>
+                            settingsSignal.updateSingleInstance(value),
+                        activeColor: const Color(0xFFFCE7AC),
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    }),
+                    Watch((context) {
+                      return SwitchListTile(
+                        title: const Text(
+                          'Background Playback',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        subtitle: const Text(
+                          'Minimize to tray instead of closing',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                        value: settingsSignal.backgroundPlayback.value,
+                        onChanged: (value) =>
+                            settingsSignal.updateBackgroundPlayback(value),
+                        activeColor: const Color(0xFFFCE7AC),
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    }),
+                    Watch((context) {
+                      return SwitchListTile(
+                        title: const Text(
+                          'Use Custom Font (Iosevka)',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        subtitle: const Text(
+                          'Use the bundled Iosevka Nerd Font for a premium look',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                        value: settingsSignal.useCustomFont.value,
+                        onChanged: (value) =>
+                            settingsSignal.updateCustomFont(value),
+                        activeColor: const Color(0xFFFCE7AC),
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 32),
+
+            // Library Settings
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color.fromARGB(170, 17, 23, 28),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color.fromARGB(38, 255, 239, 175),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Library',
+                    style: TextStyle(
+                      color: Color(0xFFFCE7AC),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Manage your music library',
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                  const SizedBox(height: 20),
+                  Watch((context) {
+                    final isScanning = audioSignal.isScanning.value;
+                    return SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: isScanning
+                            ? null
+                            : () => audioSignal.reindexLibrary(),
+                        icon: isScanning
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white54,
+                                ),
+                              )
+                            : const Icon(Icons.refresh),
+                        label: Text(
+                          isScanning ? 'Indexing...' : 'Re-index Songs',
+                        ),
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E222B),
+                          foregroundColor: Colors.white,
+                          disabledForegroundColor: Colors.white38,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
           ],
         ),
       ),

@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:signals/signals_flutter.dart';
+import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:flutter_single_instance/flutter_single_instance.dart';
+import 'package:signals_flutter/signals_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'router.dart';
 
 import 'package:audio_service/audio_service.dart';
@@ -22,6 +25,21 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   print('APP_START: Widgets initialized');
 
+  // Initialize Signals (Load settings early for single instance check)
+  await settingsSignal.loadSettings();
+
+  // Single Instance Support
+  if (isDesktop && settingsSignal.useSingleInstance.value) {
+    final isFirstInstance = await FlutterSingleInstance().isFirstInstance();
+    if (!isFirstInstance) {
+      print(
+        'APP_START: Another instance is running. Bringing to front and exiting.',
+      );
+      await FlutterSingleInstance().focus();
+      exit(0);
+    }
+  }
+
   // Initialize platform-specific features (Desktop only)
   await PlatformService().init();
 
@@ -36,12 +54,38 @@ Future<void> main() async {
   );
   print('APP_START: AudioService initialized');
 
-  // Initialize Signals
-  await settingsSignal.loadSettings();
+  // Initialize Audio Signal
   await audioSignal.init(_audioHandler);
+
+  // Request Android Permissions
+  await requestAndroidPermissions();
 
   print('APP_START: Running app');
   runApp(const MusicApp());
+
+  // Bitsdojo Window Initialization
+  if (isDesktop) {
+    doWhenWindowReady(() {
+      const initialSize = Size(1280, 720);
+      appWindow.minSize = const Size(800, 600);
+      appWindow.size = initialSize;
+      appWindow.alignment = Alignment.center;
+      appWindow.title = "Music App";
+      appWindow.show();
+    });
+  }
+}
+
+Future<void> requestAndroidPermissions() async {
+  if (Platform.isAndroid) {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.audio,
+      Permission.storage,
+      Permission.notification,
+    ].request();
+
+    print('Android Permissions: $statuses');
+  }
 }
 
 class MusicApp extends StatelessWidget {
@@ -68,7 +112,7 @@ class MusicApp extends StatelessWidget {
             secondary: const Color(0xFFFCE7AC),
           ),
           useMaterial3: true,
-          textTheme: isDesktop
+          textTheme: isDesktop && settingsSignal.useCustomFont.value
               ? ThemeData.dark().textTheme.apply(
                   fontFamily: 'Iosevka Nerd Font',
                 )

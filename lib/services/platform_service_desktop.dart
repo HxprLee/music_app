@@ -1,51 +1,42 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_acrylic/flutter_acrylic.dart';
-import 'package:just_audio_media_kit/just_audio_media_kit.dart';
-import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'platform_service.dart';
-import 'discord_rpc_service.dart';
+import 'platform_service_desktop_impl.dart' deferred as impl;
 
-PlatformService getPlatformService() => PlatformServiceDesktop();
+PlatformService getPlatformService() => PlatformServiceProxy();
 
-class PlatformServiceDesktop implements PlatformService {
+class PlatformServiceProxy implements PlatformService {
+  PlatformService? _delegate;
+
   @override
   Future<void> init() async {
     if (kIsWeb) return;
+    // Only load implementation if we are on a desktop platform
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-      // Explicitly register JustAudioMediaKit on Desktop
-      JustAudioPlatform.instance = JustAudioMediaKit();
-      JustAudioMediaKit.ensureInitialized();
-
-      // Initialize transparent window on Desktop
-      await Window.initialize();
-      await Window.setEffect(
-        effect: WindowEffect.transparent,
-        color: const Color.fromARGB(165, 18, 22, 26),
-      );
-
-      // Initialize Discord RPC
-      await DiscordRpcService().init();
+        await impl.loadLibrary();
+        _delegate = impl.PlatformServiceDesktopImpl();
+        await _delegate!.init();
     }
   }
 
   @override
   Future<void> updatePresence(dynamic song, {String? artworkUrl, bool isPlaying = true}) async {
-    await DiscordRpcService().updatePresence(
-      song,
-      artworkUrl: artworkUrl,
-      isPlaying: isPlaying,
-    );
+    if (_delegate != null) {
+      await _delegate!.updatePresence(song, artworkUrl: artworkUrl, isPlaying: isPlaying);
+    }
   }
 
   @override
   Future<void> clearPresence() async {
-    await DiscordRpcService().clearPresence();
+    if (_delegate != null) {
+      await _delegate!.clearPresence();
+    }
   }
 
   @override
   Future<void> dispose() async {
-    await DiscordRpcService().dispose();
+    if (_delegate != null) {
+      await _delegate!.dispose();
+    }
   }
 }

@@ -264,7 +264,7 @@ class MyAudioHandler extends BaseAudioHandler {
 
     try {
       // Stop current playback first to prevent overlap
-      await _player.stop();
+      // await _player.stop(); // Removed to prevent notification flickering
 
       // Check if we were cancelled before loading
       if (thisLoad.isCompleted || _isDisposed) return;

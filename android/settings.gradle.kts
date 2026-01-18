@@ -26,6 +26,11 @@ plugins {
 include(":app")
 
 gradle.settingsEvaluated {
-    settings.rootProject.children.removeIf { it.name == "flutter_discord_rpc" }
+    settings.rootProject.children.removeIf {
+        it.name == "flutter_discord_rpc" ||
+        it.name.startsWith("bitsdojo_window") ||
+        it.name == "nativeapi" ||
+        it.name == "cnativeapi"
+    }
 }
 

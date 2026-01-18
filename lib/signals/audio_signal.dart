@@ -170,6 +170,13 @@ class AudioSignal {
     isScanning.value = false;
   }
 
+  Future<void> reindexLibrary() async {
+    isScanning.value = true;
+    allSongs.value = []; // Clear in-memory
+    await SongCache.clearCache(); // Clear disk cache
+    await scanMusicDirectory(); // Rescan
+  }
+
   Future<void> _scanDirectory(
     Directory dir,
     List<Song> songs,

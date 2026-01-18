@@ -13,7 +13,7 @@ class SongCache {
     return '${dir.path}/music_app_cache';
   }
 
-  static Future<String> get _artDir async {
+  static Future<String> get artDir async {
     final cache = await _cacheDir;
     return '$cache/$_artDirName';
   }
@@ -26,13 +26,13 @@ class SongCache {
   /// Initialize cache directories
   static Future<void> init() async {
     final cacheDir = Directory(await _cacheDir);
-    final artDir = Directory(await _artDir);
+    final artDirectory = Directory(await artDir);
 
     if (!await cacheDir.exists()) {
       await cacheDir.create(recursive: true);
     }
-    if (!await artDir.exists()) {
-      await artDir.create(recursive: true);
+    if (!await artDirectory.exists()) {
+      await artDirectory.create(recursive: true);
     }
   }
 
@@ -51,7 +51,7 @@ class SongCache {
 
       final content = await file.readAsString();
       final List<dynamic> jsonList = jsonDecode(content);
-      final artDirPath = await _artDir;
+      final artDirPath = await artDir;
 
       final songs = <Song>[];
       for (final json in jsonList) {
@@ -114,7 +114,7 @@ class SongCache {
   static Future<void> saveAlbumArt(String songPath, Uint8List artBytes) async {
     try {
       await init();
-      final artDirPath = await _artDir;
+      final artDirPath = await artDir;
       final artPath = '$artDirPath/${_artFileName(songPath)}';
       await File(artPath).writeAsBytes(artBytes);
     } catch (e) {
@@ -126,5 +126,23 @@ class SongCache {
   static Future<Set<String>> getCachedPaths() async {
     final songs = await loadCache();
     return songs.map((s) => s.path).toSet();
+  }
+
+  /// Get the album art file for a song
+  static Future<File> getAlbumArtFile(String songPath) async {
+    final artDirPath = await artDir;
+    return File('$artDirPath/${_artFileName(songPath)}');
+  }
+
+  /// Clear the song cache file
+  static Future<void> clearCache() async {
+    try {
+      final file = File(await _cacheFilePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      print('Error clearing cache: $e');
+    }
   }
 }

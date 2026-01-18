@@ -4,6 +4,7 @@ import 'screens/home_shell.dart';
 import 'screens/file_explorer_screen.dart';
 import 'screens/playlist_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/search_screen.dart';
 import 'widgets/songs_list_content.dart';
 import 'signals/audio_signal.dart';
 
@@ -21,6 +22,12 @@ final GoRouter router = GoRouter(
           path: '/',
           pageBuilder: (context, state) =>
               const NoTransitionPage(child: SongsListContent()),
+        ),
+        // Search
+        GoRoute(
+          path: '/search',
+          pageBuilder: (context, state) =>
+              const NoTransitionPage(child: SearchScreen()),
         ),
         // File Explorer
         GoRoute(

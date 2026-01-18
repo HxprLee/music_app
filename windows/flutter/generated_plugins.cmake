@@ -3,10 +3,15 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  bitsdojo_window_windows
   flutter_acrylic
+  permission_handler_windows
+  screen_retriever_windows
+  window_manager
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  cnativeapi
   flutter_discord_rpc
   metadata_god
 )
