@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:signals/signals_flutter.dart';
@@ -34,6 +35,10 @@ class AudioSignal {
   final searchQuery = signal<String>('');
   final isShuffleMode = signal<bool>(false);
   final playerExpansion = signal<double>(0.0);
+  final headerShowBlur = signal<bool>(false);
+
+  // Caches
+  final Map<String, Song> _explorerSongCache = {};
 
   // Computed for backward compatibility or simple checks
   late final isPlayerExpanded = computed(() => playerExpansion.value > 0.1);
@@ -62,7 +67,6 @@ class AudioSignal {
 
   Future<void> init(AudioHandler handler) async {
     _audioHandler = handler;
-    MetadataGod.initialize();
 
     if (isDesktop) {
       _discordTimer = Timer.periodic(const Duration(seconds: 7), (_) {
@@ -127,9 +131,7 @@ class AudioSignal {
     );
   }
 
-  // Scanning & Cache
   Future<void> _loadCacheAndScan() async {
-    isScanning.value = true;
     final cachedSongs = await SongCache.loadCache();
     if (cachedSongs.isNotEmpty) {
       allSongs.value = cachedSongs;
@@ -141,7 +143,13 @@ class AudioSignal {
   }
 
   Future<void> scanMusicDirectory() async {
+    if (isScanning.value) return;
     isScanning.value = true;
+
+    final receivePort = ReceivePort();
+    final exitPort = ReceivePort();
+    Isolate? isolate;
+
     try {
       final musicPath = await getMusicPath();
       if (musicPath.isEmpty) {
@@ -156,80 +164,85 @@ class AudioSignal {
       }
 
       final cachedPaths = allSongs.value.map((s) => s.path).toSet();
-      final List<Song> newSongs = [];
-      await _scanDirectory(musicDir, newSongs, cachedPaths);
+      final artDir = await SongCache.artDir;
 
-      if (newSongs.isNotEmpty) {
-        allSongs.addAll(newSongs);
+      print(
+        'Starting rock-solid streaming background directory scan: $musicPath',
+      );
+
+      isolate = await Isolate.spawn(_indexingIsolateEntry, {
+        'sendPort': receivePort.sendPort,
+        'musicPath': musicPath,
+        'cachedPaths': cachedPaths,
+        'artDir': artDir,
+      });
+
+      // Robust monitoring: if isolate exits unexpectedly, we still clear isScanning
+      isolate.addOnExitListener(exitPort.sendPort);
+
+      final List<Song> batch = [];
+      final stopwatch = Stopwatch()..start();
+
+      bool isolateDone = false;
+
+      // Listen for exit in the background
+      exitPort.first.then((_) {
+        if (!isolateDone) {
+          print('Isolate exited unexpectedly');
+          isScanning.value = false;
+          receivePort.close();
+          exitPort.close();
+        }
+      });
+
+      await for (final message in receivePort) {
+        if (message is Song) {
+          batch.add(message);
+
+          if (batch.length >= 20 || stopwatch.elapsedMilliseconds > 500) {
+            allSongs.addAll(batch);
+            batch.clear();
+            stopwatch.reset();
+          }
+        } else if (message == 'done') {
+          print('Background scan complete.');
+          isolateDone = true;
+          break;
+        } else if (message is Map && message['type'] == 'progress') {
+          print('Scan progress: ${message['count']} found');
+        } else if (message is Map && message['type'] == 'error') {
+          print('Isolate error: ${message['message']}');
+        }
+      }
+
+      // Add remaining songs
+      if (batch.isNotEmpty) {
+        allSongs.addAll(batch);
+      }
+
+      if (allSongs.value.isNotEmpty) {
         await SongCache.saveCache(allSongs.value);
         if (_audioHandler is MyAudioHandler) {
           await _audioHandler.setPlaylist(allSongs.value);
         }
       }
-    } catch (_) {}
-    isScanning.value = false;
+    } catch (e) {
+      print('Error during scan: $e');
+    } finally {
+      receivePort.close();
+      exitPort.close();
+      isolate?.kill(priority: Isolate.immediate);
+      isScanning.value = false;
+    }
   }
 
   Future<void> reindexLibrary() async {
-    isScanning.value = true;
     allSongs.value = []; // Clear in-memory
     await SongCache.clearCache(); // Clear disk cache
     await scanMusicDirectory(); // Rescan
   }
 
-  Future<void> _scanDirectory(
-    Directory dir,
-    List<Song> songs,
-    Set<String> cachedPaths,
-  ) async {
-    try {
-      await for (final entity in dir.list()) {
-        if (entity is File) {
-          if (cachedPaths.contains(entity.path)) continue;
-          if (_isSupportedAudio(entity.path)) {
-            var song = Song.fromPath(entity.path);
-            try {
-              final metadata = await MetadataGod.readMetadata(
-                file: entity.path,
-              );
-              bool hasArt = false;
-              if (metadata.picture?.data != null) {
-                try {
-                  await SongCache.saveAlbumArt(
-                    entity.path,
-                    metadata.picture!.data,
-                  );
-                  hasArt = true;
-                } catch (_) {}
-              }
-              // Calculate bitrate from file size and duration
-              int? bitrate;
-              if (metadata.durationMs != null && metadata.durationMs! > 0) {
-                final fileSizeBytes = await entity.length();
-                final durationSeconds = metadata.durationMs! / 1000;
-                bitrate = ((fileSizeBytes * 8) / durationSeconds / 1000)
-                    .round();
-              }
-
-              song = song.copyWith(
-                title: metadata.title,
-                artist: metadata.artist,
-                album: metadata.album,
-                hasAlbumArt: hasArt,
-                duration: metadata.durationMs != null
-                    ? Duration(milliseconds: metadata.durationMs!.toInt())
-                    : null,
-                bitrate: bitrate,
-              );
-            } catch (_) {}
-            songs.add(song);
-          }
-        } else if (entity is Directory) {
-          await _scanDirectory(entity, songs, cachedPaths);
-        }
-      }
-    } catch (_) {}
-  }
+  // Removed _scanDirectory in favor of _performFullScan in isolate
 
   // Playback Control
   Future<void> play() => _audioHandler.play();
@@ -386,14 +399,7 @@ class AudioSignal {
     return [];
   }
 
-  bool _isSupportedAudio(String path) {
-    final p = path.toLowerCase();
-    return p.endsWith('.mp3') ||
-        p.endsWith('.m4a') ||
-        p.endsWith('.wav') ||
-        p.endsWith('.flac') ||
-        p.endsWith('.ogg');
-  }
+  // Removed _isSupportedAudio from class
 
   Future<bool> _hasMusic(Directory dir) async {
     try {
@@ -434,22 +440,32 @@ class AudioSignal {
   }
 
   Future<Song> getExplorerSong(File file) async {
+    // 1. Check library
     try {
       return allSongs.value.firstWhere((s) => s.path == file.path);
-    } catch (_) {
-      var song = Song.fromPath(file.path);
-      try {
-        final metadata = await MetadataGod.readMetadata(file: file.path);
-        song = song.copyWith(
-          title: metadata.title,
-          artist: metadata.artist,
-          album: metadata.album,
-          duration: metadata.durationMs != null
-              ? Duration(milliseconds: metadata.durationMs!.toInt())
-              : null,
-        );
-      } catch (_) {}
+    } catch (_) {}
+
+    // 2. Check explorer cache
+    if (_explorerSongCache.containsKey(file.path)) {
+      return _explorerSongCache[file.path]!;
+    }
+
+    // 3. Extract metadata
+    try {
+      final metadata = await Isolate.run(
+        () => _extractMetadata(file.path, null),
+      );
+      final song = Song(
+        path: file.path,
+        title: metadata['title'] ?? 'Unknown',
+        artist: metadata['artist'] ?? 'Unknown Artist',
+        album: metadata['album'],
+        duration: metadata['duration'],
+      );
+      _explorerSongCache[file.path] = song;
       return song;
+    } catch (_) {
+      return Song.fromPath(file.path);
     }
   }
 
@@ -459,3 +475,116 @@ class AudioSignal {
 }
 
 final audioSignal = AudioSignal();
+
+bool _isSupportedAudio(String path) {
+  final p = path.toLowerCase();
+  return p.endsWith('.mp3') ||
+      p.endsWith('.m4a') ||
+      p.endsWith('.wav') ||
+      p.endsWith('.flac') ||
+      p.endsWith('.ogg');
+}
+
+/// Entry point for the streaming indexing isolate
+Future<void> _indexingIsolateEntry(Map<String, dynamic> params) async {
+  final SendPort sendPort = params['sendPort'];
+  final String musicPath = params['musicPath'];
+  final Set<String> cachedPaths = params['cachedPaths'];
+  final String artDir = params['artDir'];
+
+  try {
+    MetadataGod.initialize();
+    final dir = Directory(musicPath);
+    if (!dir.existsSync()) {
+      sendPort.send('done');
+      return;
+    }
+
+    // 1. Discover files ASYNCHRONOUSLY to avoid blocking
+    final List<String> filesToProcess = [];
+    int foundCount = 0;
+
+    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      if (entity is File && _isSupportedAudio(entity.path)) {
+        if (!cachedPaths.contains(entity.path)) {
+          filesToProcess.add(entity.path);
+          foundCount++;
+
+          // Periodic progress update during discovery
+          if (foundCount % 50 == 0) {
+            sendPort.send({'type': 'progress', 'count': foundCount});
+          }
+        }
+      }
+    }
+
+    if (filesToProcess.isEmpty) {
+      sendPort.send('done');
+      return;
+    }
+
+    // 2. Process files sequentially to avoid memory spikes
+    for (final path in filesToProcess) {
+      try {
+        final metadata = await MetadataGod.readMetadata(file: path);
+
+        bool hasArt = false;
+        if (metadata.picture != null) {
+          try {
+            final artPath = '$artDir/${path.hashCode.abs()}.jpg';
+            await File(artPath).writeAsBytes(metadata.picture!.data);
+            hasArt = true;
+          } catch (_) {}
+        }
+
+        final song = Song(
+          path: path,
+          title: metadata.title ?? 'Unknown',
+          artist: metadata.artist ?? 'Unknown Artist',
+          album: metadata.album,
+          hasAlbumArt: hasArt,
+          duration: metadata.durationMs != null
+              ? Duration(milliseconds: metadata.durationMs!.toInt())
+              : null,
+        );
+
+        sendPort.send(song);
+      } catch (e) {
+        sendPort.send(Song.fromPath(path));
+      }
+    }
+  } catch (e) {
+    sendPort.send({'type': 'error', 'message': e.toString()});
+  } finally {
+    sendPort.send('done');
+  }
+}
+
+/// Top-level helper for isolate-based metadata extraction
+Future<Map<String, dynamic>> _extractMetadata(
+  String path,
+  String? artDir,
+) async {
+  try {
+    MetadataGod.initialize();
+    final metadata = await MetadataGod.readMetadata(file: path);
+
+    if (metadata.picture != null && artDir != null) {
+      try {
+        final artPath = '$artDir/${path.hashCode.abs()}.jpg';
+        await File(artPath).writeAsBytes(metadata.picture!.data);
+      } catch (_) {}
+    }
+
+    return {
+      'title': metadata.title,
+      'artist': metadata.artist,
+      'album': metadata.album,
+      'duration': metadata.durationMs != null
+          ? Duration(milliseconds: metadata.durationMs!.toInt())
+          : null,
+    };
+  } catch (_) {
+    return {};
+  }
+}

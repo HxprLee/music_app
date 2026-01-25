@@ -160,7 +160,7 @@ class _MorphingPlayerState extends State<MorphingPlayer>
     );
 
     // 3. Calculate Album Art Position (Top Anchored & Scaled)
-    const maxArtSize = 650.0;
+    const maxArtSize = 550.0;
     const sidePadding = 32.0;
     final availableWidth = screenWidth - (sidePadding * 2);
 
@@ -191,13 +191,18 @@ class _MorphingPlayerState extends State<MorphingPlayer>
         .clamp(0.0, effectiveMaxArtHeight)
         .clamp(0.0, maxArtSize);
 
-    // Center Art in its allocated top area? Or just place it at top?
-    // Let's place it at top + padding
+    // 4. Calculate Content Width (Locked to max possible art size on Desktop)
+    // This ensures seekbar/names don't shrink when art shrinks vertically
+    final maxPossibleArtSize = availableWidth.clamp(0.0, maxArtSize);
+    final contentWidth = useFullWidth ? availableWidth : maxPossibleArtSize;
+    final contentLeft = (screenWidth - contentWidth) / 2;
+
+    // Center Art in its allocated top area
     final artTop = topReserved;
     final artLeft = (screenWidth - artSize) / 2;
     final artRect = Rect.fromLTWH(artLeft, artTop, artSize, artSize);
 
-    // 4. Distribute Middle Elements Evenly
+    // 5. Distribute Middle Elements Evenly
     // Space between Art and Actions
     final middleStart = artRect.bottom;
     final middleEnd = actionsRect.top;
@@ -212,12 +217,6 @@ class _MorphingPlayerState extends State<MorphingPlayer>
     final infoTop = middleStart + gap;
     final seekbarTop = infoTop + infoHeight + gap;
     final controlsTop = seekbarTop + seekbarHeight + gap;
-
-    // Width Logic:
-    // Mobile/Compact: Use full available width (minus padding)
-    // Desktop (Large): Lock to Album Art width
-    final contentLeft = useFullWidth ? sidePadding : artLeft;
-    final contentWidth = useFullWidth ? availableWidth : artSize;
 
     final infoRect = Rect.fromLTWH(
       contentLeft,
@@ -357,148 +356,143 @@ class _MorphingPlayerState extends State<MorphingPlayer>
                 onVerticalDragStart: _handleDragStart,
                 onVerticalDragUpdate: _handleDragUpdate,
                 onVerticalDragEnd: _handleDragEnd,
+                onTap: value == 0
+                    ? () => _controller.animateTo(
+                        1.0,
+                        curve: Curves.fastLinearToSlowEaseIn,
+                      )
+                    : null,
                 child: Material(
                   type: MaterialType.transparency,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Color.lerp(
-                        const Color.fromARGB(170, 17, 23, 28),
-                        const Color(0xFF0D1117),
-                        value,
-                      ),
-                      borderRadius: BorderRadius.circular(
-                        lerpDouble(50, 0, value)!,
-                      ),
-                      border: Border.all(
-                        color: Color.lerp(
-                          const Color.fromARGB(38, 255, 239, 175),
-                          Colors.transparent,
-                          value,
-                        )!,
-                        width: lerpDouble(2, 0, value)!,
-                      ),
-                      boxShadow: [
-                        if (value > 0)
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 10,
-                            offset: const Offset(0, -2),
-                          ),
-                      ],
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                      lerpDouble(50, 0, value)!,
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(
-                        lerpDouble(50, 0, value)!,
-                      ),
-                      child: Stack(
-                        children: [
-                          // 1. Background Tap Area (for expansion)
-                          if (value < 0.5)
-                            Positioned.fill(
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () {
-                                  _controller.animateTo(
-                                    1.0,
-                                    curve: Curves.fastLinearToSlowEaseIn,
-                                  );
-                                },
-                                child: const SizedBox.expand(),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Color.lerp(
+                            const Color(0xFF11171C).withOpacity(0.6),
+                            const Color(0xFF0D1117).withOpacity(0.8),
+                            value,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            lerpDouble(50, 0, value)!,
+                          ),
+                          border: Border.all(
+                            color: Color.lerp(
+                              const Color.fromARGB(38, 255, 239, 175),
+                              Colors.transparent,
+                              value,
+                            )!,
+                            width: lerpDouble(2, 0, value)!,
+                          ),
+                          boxShadow: [
+                            if (value > 0)
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 10,
+                                offset: const Offset(0, -2),
                               ),
-                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          children: [
+                            // 2. Full Screen Background
+                            if (currentSong != null)
+                              _buildBackground(currentSong, fullOpacity),
 
-                          // 2. Full Screen Background
-                          if (currentSong != null)
-                            _buildBackground(currentSong, fullOpacity),
+                            Positioned.fill(
+                              child: Stack(
+                                children: [
+                                  // 2. Album Art
+                                  Positioned(
+                                    top: artTop,
+                                    left: artLeft,
+                                    width: artSize,
+                                    height: artSize,
+                                    child: Watch((context) {
+                                      final position =
+                                          audioSignal.position.value;
+                                      return _buildMorphingArt(
+                                        value,
+                                        artSize,
+                                        isPlaying,
+                                        duration,
+                                        position,
+                                      );
+                                    }),
+                                  ),
 
-                          Positioned.fill(
-                            child: Stack(
-                              children: [
-                                // 2. Album Art
-                                Positioned(
-                                  top: artTop,
-                                  left: artLeft,
-                                  width: artSize,
-                                  height: artSize,
-                                  child: Watch((context) {
+                                  // 3. Song Info (Text)
+                                  _buildMorphingText(
+                                    value,
+                                    screenWidth,
+                                    currentSong,
+                                    isPlaying,
+                                    expandedLayout.info,
+                                    isCompact,
+                                    isMobile,
+                                  ),
+
+                                  // 4. Playback Controls
+                                  _buildMorphingControls(
+                                    value,
+                                    screenWidth,
+                                    collapsedWidth,
+                                    isPlaying,
+                                    isCompact,
+                                    expandedLayout.controls,
+                                  ),
+
+                                  // 5. Seekbar
+                                  Watch((context) {
                                     final position = audioSignal.position.value;
-                                    return _buildMorphingArt(
+                                    return _buildMorphingSeekbar(
+                                      isMobile,
                                       value,
-                                      artSize,
-                                      isPlaying,
-                                      duration,
                                       position,
+                                      duration,
+                                      screenWidth,
+                                      expandedLayout.seekbar,
                                     );
                                   }),
-                                ),
 
-                                // 3. Song Info (Text)
-                                _buildMorphingText(
-                                  value,
-                                  screenWidth,
-                                  currentSong,
-                                  isPlaying,
-                                  expandedLayout.info,
-                                  isCompact,
-                                  isMobile,
-                                ),
-
-                                // 4. Playback Controls
-                                _buildMorphingControls(
-                                  value,
-                                  screenWidth,
-                                  collapsedWidth,
-                                  isPlaying,
-                                  isCompact,
-                                  expandedLayout.controls,
-                                ),
-
-                                // 5. Seekbar
-                                Watch((context) {
-                                  final position = audioSignal.position.value;
-                                  return _buildMorphingSeekbar(
-                                    isMobile,
+                                  // 6. Expanded Content (Actions)
+                                  _buildMorphingActions(
+                                    currentSong,
                                     value,
-                                    position,
-                                    duration,
-                                    screenWidth,
-                                    expandedLayout.seekbar,
-                                  );
-                                }),
-
-                                // 6. Expanded Content (Actions)
-                                _buildMorphingActions(
-                                  currentSong,
-                                  value,
-                                  expandedLayout.actions,
-                                  collapsedWidth,
-                                  isCompact,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // 7. Collapse Button
-                          if (fullOpacity > 0)
-                            Positioned(
-                              top: 8 + currentTopPadding,
-                              left: screenWidth / 2 - 24,
-                              child: Opacity(
-                                opacity: fullOpacity,
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.keyboard_arrow_down,
-                                    color: Color(0xFFFCE7AC),
-                                    size: 24,
+                                    expandedLayout.actions,
+                                    collapsedWidth,
+                                    isCompact,
                                   ),
-                                  onPressed: () => _controller.animateTo(
-                                    0.0,
-                                    curve: Curves.fastLinearToSlowEaseIn,
+                                ],
+                              ),
+                            ),
+
+                            // 7. Collapse Button
+                            if (fullOpacity > 0)
+                              Positioned(
+                                top: 8 + currentTopPadding,
+                                left: screenWidth / 2 - 24,
+                                child: Opacity(
+                                  opacity: fullOpacity,
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.keyboard_arrow_down,
+                                      color: Color(0xFFFCE7AC),
+                                      size: 24,
+                                    ),
+                                    onPressed: () => _controller.animateTo(
+                                      0.0,
+                                      curve: Curves.fastLinearToSlowEaseIn,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -666,7 +660,7 @@ class _MorphingPlayerState extends State<MorphingPlayer>
 
     // Calculate start width based on layout (Compact vs Full)
     final rightControlsWidth = isCompact
-        ? 160.0
+        ? 120.0 // 100px controls + 20px padding
         : 260.0; // Increased for desktop
     final availableWidth = screenWidth - widget.leftOffset;
     final margin = isMobile ? _compactMargin : _fullMargin;
@@ -728,45 +722,34 @@ class _MorphingPlayerState extends State<MorphingPlayer>
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: ShaderMask(
-                  shaderCallback: (Rect bounds) {
-                    return const LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [Colors.black, Colors.transparent],
-                      stops: [0.9, 1.0],
-                    ).createShader(bounds);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: ClipRect(
-                    child: Column(
-                      spacing: _controller.value <= 0.5 ? 0 : 1,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        value > 0.5
-                            ? MarqueeText(
-                                text: currentSong?.title ?? 'No song playing',
-                                style: titleStyle,
-                                isPlaying: isPlaying,
-                              )
-                            : Text(
-                                currentSong?.title ?? 'No song playing',
-                                style: titleStyle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                        SizedBox(height: 6),
-                        Text(
-                          currentSong?.artist ?? '',
-                          style: artistStyle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                child: value > 0.1
+                    ? ShaderMask(
+                        shaderCallback: (Rect bounds) {
+                          return const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [Colors.black, Colors.transparent],
+                            stops: [0.9, 1.0],
+                          ).createShader(bounds);
+                        },
+                        blendMode: BlendMode.dstIn,
+                        child: ClipRect(
+                          child: _buildTextContent(
+                            currentSong,
+                            titleStyle,
+                            artistStyle,
+                            isPlaying,
+                            value,
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
+                      )
+                    : _buildTextContent(
+                        currentSong,
+                        titleStyle,
+                        artistStyle,
+                        isPlaying,
+                        value,
+                      ),
               ),
               if (value > 0.5)
                 Opacity(
@@ -789,6 +772,41 @@ class _MorphingPlayerState extends State<MorphingPlayer>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTextContent(
+    Song? currentSong,
+    TextStyle titleStyle,
+    TextStyle artistStyle,
+    bool isPlaying,
+    double value,
+  ) {
+    return Column(
+      spacing: value <= 0.5 ? 0 : 1,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        value > 0.5
+            ? MarqueeText(
+                text: currentSong?.title ?? 'No song playing',
+                style: titleStyle,
+                isPlaying: isPlaying,
+              )
+            : Text(
+                currentSong?.title ?? 'No song playing',
+                style: titleStyle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+        SizedBox(height: 6),
+        Text(
+          currentSong?.artist ?? '',
+          style: artistStyle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
     );
   }
 
@@ -899,8 +917,8 @@ class _MorphingPlayerState extends State<MorphingPlayer>
 
     if (isCompact) {
       // Mobile: Right aligned, Play button hidden
-      startRight = 0;
-      startWidth = _leftControlsWidth - 28;
+      startRight = 16.0; // Restored padding
+      startWidth = 100.0; // Match new tighter layout
       startLeft = collapsedWidth - startRight - startWidth;
       startPlayBtnSize = 0;
     } else {
@@ -1060,87 +1078,90 @@ class _MorphingPlayerState extends State<MorphingPlayer>
       height: currentHeight,
       child: Opacity(
         opacity: actionsOpacity,
-        child: Stack(
-          alignment: Alignment.bottomCenter, // Align to bottom
-          children: [
-            // Format Badge (Positioned above buttons)
-            if (currentSong != null)
-              Positioned(
-                bottom: 60, // 48px (buttons) + 12px (gap)
-                child: Opacity(
-                  opacity: badgeOpacity,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFCE7AC),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFFFCE7AC).withOpacity(0.2),
+        child: IgnorePointer(
+          ignoring: isCompact && value < 0.05,
+          child: Stack(
+            alignment: Alignment.bottomCenter, // Align to bottom
+            children: [
+              // Format Badge (Positioned above buttons)
+              if (currentSong != null)
+                Positioned(
+                  bottom: 60, // 48px (buttons) + 12px (gap)
+                  child: Opacity(
+                    opacity: badgeOpacity,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
                       ),
-                    ),
-                    child: Text(
-                      '${currentSong.path.split('.').last.toUpperCase()} | ${currentSong.bitrate ?? '---'}Kbps',
-                      style: const TextStyle(
-                        color: Color(0xFF21282D),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 11,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFCE7AC),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: const Color(0xFFFCE7AC).withOpacity(0.2),
+                        ),
+                      ),
+                      child: Text(
+                        '${currentSong.path.split('.').last.toUpperCase()} | ${currentSong.bitrate ?? '---'}Kbps',
+                        style: const TextStyle(
+                          color: Color(0xFF21282D),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-            // Action Buttons (Pinned to bottom)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 48,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: FaIcon(
-                      FontAwesomeIcons.shuffle,
-                      color: const Color(0xFFFCE7AC),
-                      size: iconSize,
+              // Action Buttons (Pinned to bottom)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 48,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: FaIcon(
+                        FontAwesomeIcons.shuffle,
+                        color: const Color(0xFFFCE7AC),
+                        size: iconSize,
+                      ),
+                      onPressed: audioSignal.toggleShuffle,
                     ),
-                    onPressed: audioSignal.toggleShuffle,
-                  ),
-                  SizedBox(width: spacing),
-                  IconButton(
-                    icon: FaIcon(
-                      FontAwesomeIcons.repeat,
-                      color: const Color(0xFFFCE7AC),
-                      size: iconSize,
+                    SizedBox(width: spacing),
+                    IconButton(
+                      icon: FaIcon(
+                        FontAwesomeIcons.repeat,
+                        color: const Color(0xFFFCE7AC),
+                        size: iconSize,
+                      ),
+                      onPressed: () {},
                     ),
-                    onPressed: () {},
-                  ),
-                  SizedBox(width: spacing),
-                  IconButton(
-                    icon: FaIcon(
-                      FontAwesomeIcons.listUl,
-                      color: const Color(0xFFFCE7AC),
-                      size: iconSize,
+                    SizedBox(width: spacing),
+                    IconButton(
+                      icon: FaIcon(
+                        FontAwesomeIcons.listUl,
+                        color: const Color(0xFFFCE7AC),
+                        size: iconSize,
+                      ),
+                      onPressed: () {},
                     ),
-                    onPressed: () {},
-                  ),
-                  SizedBox(width: spacing),
-                  IconButton(
-                    icon: FaIcon(
-                      FontAwesomeIcons.ellipsis,
-                      color: const Color(0xFFFCE7AC),
-                      size: iconSize,
+                    SizedBox(width: spacing),
+                    IconButton(
+                      icon: FaIcon(
+                        FontAwesomeIcons.ellipsis,
+                        color: const Color(0xFFFCE7AC),
+                        size: iconSize,
+                      ),
+                      onPressed: () {},
                     ),
-                    onPressed: () {},
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

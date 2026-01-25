@@ -37,7 +37,12 @@ class PlaylistScreen extends StatelessWidget {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: EdgeInsets.only(
+                top: 24.0 + 80.0 + MediaQuery.of(context).padding.top,
+                left: 24.0,
+                right: 24.0,
+                bottom: 24.0,
+              ),
               child: Row(
                 children: [
                   Container(
@@ -67,15 +72,6 @@ class PlaylistScreen extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            if (MediaQuery.of(context).size.width < 600)
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.menu,
-                                  color: Colors.white54,
-                                ),
-                                onPressed: () =>
-                                    Scaffold.of(context).openDrawer(),
-                              ),
                             const Text(
                               'PLAYLIST',
                               style: TextStyle(

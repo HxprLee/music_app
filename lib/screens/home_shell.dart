@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -88,6 +89,9 @@ class _HomeShellState extends State<HomeShell> {
       contentLeftOffset = _isSidebarCollapsed ? collapsedWidth : expandedWidth;
     }
 
+    final topPadding = MediaQuery.of(context).padding.top;
+    final headerHeight = 80.0 + (isMobile ? topPadding : 0);
+
     return PopScope(
       canPop: false,
       // ignore: deprecated_member_use
@@ -101,6 +105,7 @@ class _HomeShellState extends State<HomeShell> {
       },
       child: Scaffold(
         key: _scaffoldKey,
+        extendBody: true,
         drawer: isMobile
             ? Drawer(
                 backgroundColor: Colors.transparent,
@@ -120,10 +125,32 @@ class _HomeShellState extends State<HomeShell> {
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOutCubic,
               left: contentLeftOffset,
-              top: isDesktop ? 80 : 0, // Offset for title bar height
+              top: 0, // Allow content to scroll behind header
               right: 0,
               bottom: 0,
-              child: SafeArea(child: widget.child),
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification is ScrollUpdateNotification) {
+                    final metrics = notification.metrics;
+                    if (metrics.axis == Axis.vertical) {
+                      audioSignal.headerShowBlur.value = metrics.pixels > 0;
+                    }
+                  }
+                  return false;
+                },
+                child: widget.child,
+              ),
+            ),
+
+            // Title Bar (Always visible now, layout handled internally)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOutCubic,
+              top: 0,
+              left: 0,
+              right: 0,
+              height: headerHeight, // Match design height + SafeArea on mobile
+              child: WindowTitleBar(leftOffset: contentLeftOffset),
             ),
 
             // Sidebar and MorphingPlayer with dynamic Z-index
@@ -145,10 +172,11 @@ class _HomeShellState extends State<HomeShell> {
                       )
                     : const SizedBox.shrink();
 
+                const navBarHeight = 80.0;
                 final player = MorphingPlayer(
                   key: _playerKey,
                   leftOffset: contentLeftOffset,
-                  bottomOffset: 0.0,
+                  bottomOffset: isMobile ? navBarHeight : 0.0,
                 );
 
                 return Stack(
@@ -157,16 +185,6 @@ class _HomeShellState extends State<HomeShell> {
                 );
               }),
             ),
-
-            // Title Bar (Moved to top layer)
-            if (isDesktop)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 80, // Match design height
-                child: WindowTitleBar(leftPadding: contentLeftOffset),
-              ),
 
             // Scanning Indicator
             Positioned(
@@ -216,54 +234,79 @@ class _HomeShellState extends State<HomeShell> {
         bottomNavigationBar: isMobile
             ? Watch((context) {
                 final expansion = audioSignal.playerExpansion.value;
-                return Opacity(
-                  opacity: (1 - expansion * 2).clamp(0.0, 1.0),
-                  child: expansion > 0.5
-                      ? const SizedBox.shrink()
-                      : BottomNavigationBar(
-                          currentIndex: _getSelectedIndex(location),
-                          onTap: (index) {
-                            switch (index) {
-                              case 0: // Home
-                                context.go('/');
-                                break;
-                              case 1: // YouTube Music (placeholder)
-                                // TODO: Implement YouTube Music
-                                break;
-                              case 2: // Library
-                                context.go('/explorer');
-                                break;
-                              case 3: // Settings
-                                context.go('/settings');
-                                break;
-                            }
-                          },
-                          backgroundColor: const Color(0xFF11171C),
-                          selectedItemColor: const Color(0xFFFCE7AC),
-                          unselectedItemColor: Colors.white54,
-                          type: BottomNavigationBarType.fixed,
-                          items: const [
-                            BottomNavigationBarItem(
-                              icon: FaIcon(FontAwesomeIcons.house, size: 20),
-                              label: 'Home',
-                            ),
-                            BottomNavigationBarItem(
-                              icon: FaIcon(FontAwesomeIcons.youtube, size: 20),
-                              label: 'YouTube Music',
-                            ),
-                            BottomNavigationBarItem(
-                              icon: FaIcon(
-                                FontAwesomeIcons.recordVinyl,
-                                size: 20,
+                const navBarHeight = 80.0;
+                return Transform.translate(
+                  offset: Offset(
+                    0,
+                    expansion * navBarHeight,
+                  ), // Slide down as player expands
+                  child: Opacity(
+                    opacity: (1 - expansion * 2).clamp(0.0, 1.0),
+                    child:
+                        expansion >
+                            0.8 // Hide completely when almost full
+                        ? const SizedBox.shrink()
+                        : ClipRRect(
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                              child: BottomNavigationBar(
+                                currentIndex: _getSelectedIndex(location),
+                                onTap: (index) {
+                                  switch (index) {
+                                    case 0: // Home
+                                      context.go('/');
+                                      break;
+                                    case 1: // YouTube Music (placeholder)
+                                      // TODO: Implement YouTube Music
+                                      break;
+                                    case 2: // Library
+                                      context.go('/explorer');
+                                      break;
+                                    case 3: // Settings
+                                      context.go('/settings');
+                                      break;
+                                  }
+                                },
+                                backgroundColor: const Color(
+                                  0xFF11171C,
+                                ).withOpacity(0.7),
+                                selectedItemColor: const Color(0xFFFCE7AC),
+                                unselectedItemColor: Colors.white54,
+                                type: BottomNavigationBarType.fixed,
+                                items: const [
+                                  BottomNavigationBarItem(
+                                    icon: FaIcon(
+                                      FontAwesomeIcons.house,
+                                      size: 20,
+                                    ),
+                                    label: 'Home',
+                                  ),
+                                  BottomNavigationBarItem(
+                                    icon: FaIcon(
+                                      FontAwesomeIcons.youtube,
+                                      size: 20,
+                                    ),
+                                    label: 'YouTube Music',
+                                  ),
+                                  BottomNavigationBarItem(
+                                    icon: FaIcon(
+                                      FontAwesomeIcons.recordVinyl,
+                                      size: 20,
+                                    ),
+                                    label: 'Library',
+                                  ),
+                                  BottomNavigationBarItem(
+                                    icon: FaIcon(
+                                      FontAwesomeIcons.gear,
+                                      size: 20,
+                                    ),
+                                    label: 'Settings',
+                                  ),
+                                ],
                               ),
-                              label: 'Library',
                             ),
-                            BottomNavigationBarItem(
-                              icon: FaIcon(FontAwesomeIcons.gear, size: 20),
-                              label: 'Settings',
-                            ),
-                          ],
-                        ),
+                          ),
+                  ),
                 );
               })
             : null,

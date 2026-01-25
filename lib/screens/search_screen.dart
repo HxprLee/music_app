@@ -65,7 +65,12 @@ class _SearchScreenState extends State<SearchScreen> {
                 // Header
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: EdgeInsets.only(
+                      top: 24.0 + 80.0 + MediaQuery.of(context).padding.top,
+                      left: 24.0,
+                      right: 24.0,
+                      bottom: 24.0,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

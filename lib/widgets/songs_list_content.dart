@@ -49,20 +49,17 @@ class _SongsListContentState extends State<SongsListContent> {
             // Header
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(24.0),
+                padding: EdgeInsets.only(
+                  top: 24.0 + 80.0 + MediaQuery.of(context).padding.top,
+                  left: 24.0,
+                  right: 24.0,
+                  bottom: 24.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        if (MediaQuery.of(context).size.width < 600)
-                          IconButton(
-                            icon: const Icon(
-                              Icons.menu,
-                              color: Color(0xFFFCE7AC),
-                            ),
-                            onPressed: () => Scaffold.of(context).openDrawer(),
-                          ),
                         const Text(
                           'Songs',
                           style: TextStyle(

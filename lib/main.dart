@@ -67,7 +67,7 @@ Future<void> main() async {
   if (isDesktop) {
     doWhenWindowReady(() {
       const initialSize = Size(1280, 720);
-      appWindow.minSize = const Size(800, 600);
+      appWindow.minSize = const Size(400, 600);
       appWindow.size = initialSize;
       appWindow.alignment = Alignment.center;
       appWindow.title = "Music App";

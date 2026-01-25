@@ -232,12 +232,7 @@ class _PlayerBarState extends State<PlayerBar>
           borderRadius: BorderRadius.circular(50),
           child: Container(
             height: 80,
-            margin: EdgeInsets.fromLTRB(
-              isMobile ? 12 : 24,
-              0,
-              isMobile ? 12 : 24,
-              isMobile ? 12 : 24,
-            ),
+            margin: EdgeInsets.fromLTRB(isMobile ? 12 : 24),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: const Color.fromARGB(170, 17, 23, 28),

@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'dart:ui';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -8,9 +11,8 @@ import '../signals/audio_signal.dart';
 import '../signals/settings_signal.dart';
 
 class WindowTitleBar extends StatefulWidget {
-  final double leftPadding;
-
-  const WindowTitleBar({super.key, this.leftPadding = 0});
+  final double leftOffset;
+  const WindowTitleBar({super.key, this.leftOffset = 0});
 
   @override
   State<WindowTitleBar> createState() => _WindowTitleBarState();
@@ -43,145 +45,185 @@ class _WindowTitleBarState extends State<WindowTitleBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Watch((context) {
-      if (!settingsSignal.useCustomWindowControls.value) {
-        return const SizedBox.shrink();
-      }
+    final isDesktop =
+        !kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS);
 
+    return Watch((context) {
       final expansion = audioSignal.playerExpansion.value;
       final hideContentOpacity = (1 - expansion * 2).clamp(0.0, 1.0);
+      // Only show blur if not expanded and scroll is active
+      final showBlur = audioSignal.headerShowBlur.value && expansion < 0.1;
+      final topPadding = MediaQuery.of(context).padding.top;
 
-      return WindowTitleBarBox(
-        child: Container(
-          height: 80,
-          color: Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              // Left: Navigation Buttons
-              Opacity(
-                opacity: hideContentOpacity,
-                child: IgnorePointer(
-                  ignoring: expansion > 0.5,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Sidebar spacing (content offset)
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOutCubic,
-                        width: widget.leftPadding,
-                      ),
-                      const SizedBox(width: 16),
-                      _CircularIconButton(
-                        icon: Icons.chevron_left,
-                        onPressed: () {
-                          if (context.canPop()) {
-                            context.pop();
-                          }
-                        },
-                        tooltip: 'Back',
-                      ),
-                      const SizedBox(width: 8),
-                      _CircularIconButton(
-                        icon: Icons.chevron_right,
-                        onPressed: null,
-                        tooltip: 'Forward',
-                      ),
+      return IgnorePointer(
+        ignoring: expansion > 0.5,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: EdgeInsets.only(
+            top: isDesktop ? 0 : topPadding,
+            left: 2 + widget.leftOffset,
+            right: 2,
+          ),
+          decoration: BoxDecoration(
+            gradient: showBlur
+                ? LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      const Color(0xFF0D1117).withOpacity(0.9),
+                      const Color(0xFF0D1117).withOpacity(0.0),
                     ],
-                  ),
-                ),
-              ),
-
-              // Draggable area
-              Expanded(child: MoveWindow()),
-
-              // Center: Search Bar
-              Opacity(
-                opacity: hideContentOpacity,
-                child: IgnorePointer(
-                  ignoring: expansion > 0.5,
-                  child: Center(
-                    child: Container(
-                      height: 40,
-                      constraints: const BoxConstraints(maxWidth: 450),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1A1F24),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.05),
-                        ),
-                      ),
-                      child: CallbackShortcuts(
-                        bindings: {
-                          const SingleActivator(LogicalKeyboardKey.escape): () {
-                            if (context.canPop()) {
-                              context.pop();
-                              // Clear search on exit
-                              audioSignal.searchQuery.value = '';
-                            }
-                          },
-                        },
-                        child: TextField(
-                          controller: _searchController,
-                          textAlignVertical: TextAlignVertical.center,
-                          onChanged: (value) =>
-                              audioSignal.searchQuery.value = value,
-                          onTap: () {
-                            final location = GoRouterState.of(
-                              context,
-                            ).uri.toString();
-                            if (location != '/search') {
-                              context.push('/search');
-                            }
-                          },
-                          onSubmitted: (value) {
-                            final location = GoRouterState.of(
-                              context,
-                            ).uri.toString();
-                            if (location != '/search') {
-                              context.push('/search');
-                            }
-                          },
-                          decoration: InputDecoration(
-                            hintText: 'Search songs, albums, artists',
-                            hintStyle: const TextStyle(
-                              color: Colors.white38,
-                              fontSize: 14,
-                            ),
-                            prefixIcon: const Icon(
-                              Icons.search,
-                              color: Colors.white38,
-                              size: 20,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
+                  )
+                : null,
+          ),
+          child: SizedBox(
+            height: 80,
+            child: Row(
+              children: [
+                // Left: Navigation Buttons (Desktop) or Sidebar Toggle (Android)
+                Opacity(
+                  opacity: hideContentOpacity,
+                  child: IgnorePointer(
+                    ignoring: expansion > 0.5,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: 16),
+                        if (isDesktop) ...[
+                          _CircularIconButton(
+                            icon: Icons.chevron_left,
+                            onPressed: () {
+                              if (context.canPop()) {
+                                context.pop();
+                              }
+                            },
+                            tooltip: 'Back',
                           ),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
+                          const SizedBox(width: 8),
+                          _CircularIconButton(
+                            icon: Icons.chevron_right,
+                            onPressed: null,
+                            tooltip: 'Forward',
                           ),
-                        ),
-                      ),
+                        ] else ...[
+                          _CircularIconButton(
+                            icon: Icons.menu,
+                            onPressed: () {
+                              Scaffold.of(context).openDrawer();
+                            },
+                            tooltip: 'Menu',
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-              ),
 
-              // Draggable area
-              Expanded(child: MoveWindow()),
+                const SizedBox(width: 16),
 
-              // Right: Window Buttons
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [const WindowButtons(), const SizedBox(width: 16)],
-              ),
-            ],
+                // Center: Search Bar (Responsive)
+                Expanded(
+                  child: isDesktop
+                      ? MoveWindow(
+                          child: Center(
+                            child: _buildSearchBar(
+                              hideContentOpacity,
+                              expansion,
+                            ),
+                          ),
+                        )
+                      : _buildSearchBar(hideContentOpacity, expansion),
+                ),
+
+                const SizedBox(width: 16),
+
+                // Right: Window Buttons (Desktop) or Settings (Android)
+                Opacity(
+                  opacity: hideContentOpacity,
+                  child: IgnorePointer(
+                    ignoring: expansion > 0.5,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isDesktop &&
+                            settingsSignal.useCustomWindowControls.value)
+                          const WindowButtons()
+                        else if (!isDesktop)
+                          _CircularIconButton(
+                            icon: Icons.settings,
+                            onPressed: () => context.go('/settings'),
+                            tooltip: 'Settings',
+                          ),
+                        const SizedBox(width: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
     });
+  }
+
+  Widget _buildSearchBar(double opacity, double expansion) {
+    return Opacity(
+      opacity: opacity,
+      child: IgnorePointer(
+        ignoring: expansion > 0.5,
+        child: Container(
+          height: 40,
+          constraints: const BoxConstraints(maxWidth: 600),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1F24),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: CallbackShortcuts(
+            bindings: {
+              const SingleActivator(LogicalKeyboardKey.escape): () {
+                if (context.canPop()) {
+                  context.pop();
+                  // Clear search on exit
+                  audioSignal.searchQuery.value = '';
+                }
+              },
+            },
+            child: TextField(
+              controller: _searchController,
+              textAlignVertical: TextAlignVertical.center,
+              onChanged: (value) => audioSignal.searchQuery.value = value,
+              onTap: () {
+                final location = GoRouterState.of(context).uri.toString();
+                if (location != '/search') {
+                  context.push('/search');
+                }
+              },
+              onSubmitted: (value) {
+                final location = GoRouterState.of(context).uri.toString();
+                if (location != '/search') {
+                  context.push('/search');
+                }
+              },
+              decoration: InputDecoration(
+                hintText: 'Search songs, albums, artists',
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: Colors.white38,
+                  size: 20,
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -26,6 +26,7 @@ class AlbumArtCache {
     if (!await artDir.exists()) {
       await artDir.create(recursive: true);
     }
+    MetadataGod.initialize();
   }
 
   /// Get the file path for a song's album art
@@ -74,7 +75,7 @@ class AlbumArtCache {
     // Fall back to extracting from audio file
     try {
       final metadata = await MetadataGod.readMetadata(file: songPath);
-      if (metadata.picture?.data != null) {
+      if (metadata.picture != null) {
         final art = metadata.picture!.data;
         // Cache to disk for future use
         await _saveArtToDisk(songPath, art);
@@ -111,8 +112,9 @@ class AlbumArtCache {
     // Try to extract and cache
     try {
       final metadata = await MetadataGod.readMetadata(file: songPath);
-      if (metadata.picture?.data != null) {
-        await _saveArtToDisk(songPath, metadata.picture!.data);
+      if (metadata.picture != null) {
+        final art = metadata.picture!.data;
+        await _saveArtToDisk(songPath, art);
         return artFile.uri;
       }
     } catch (e) {
