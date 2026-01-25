@@ -63,6 +63,11 @@ class _PlayerBarState extends State<PlayerBar>
           final position = audioSignal.position.value;
           final duration = audioSignal.duration.value;
 
+          // Hide player bar on mobile when no song is loaded
+          if (isMobile && currentSong == null) {
+            return const SizedBox.shrink();
+          }
+
           // Load album art when song changes
           if (currentSong != null) {
             _loadAlbumArt(currentSong.path);

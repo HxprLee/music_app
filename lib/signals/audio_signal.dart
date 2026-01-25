@@ -135,9 +135,7 @@ class AudioSignal {
     final cachedSongs = await SongCache.loadCache();
     if (cachedSongs.isNotEmpty) {
       allSongs.value = cachedSongs;
-      if (_audioHandler is MyAudioHandler) {
-        await _audioHandler.setPlaylist(allSongs.value);
-      }
+      // Don't auto-load playlist on startup - wait for user to play
     }
     await scanMusicDirectory();
   }
@@ -222,9 +220,7 @@ class AudioSignal {
 
       if (allSongs.value.isNotEmpty) {
         await SongCache.saveCache(allSongs.value);
-        if (_audioHandler is MyAudioHandler) {
-          await _audioHandler.setPlaylist(allSongs.value);
-        }
+        // Don't auto-load playlist - wait for user to play a song
       }
     } catch (e) {
       print('Error during scan: $e');
@@ -537,6 +533,14 @@ Future<void> _indexingIsolateEntry(Map<String, dynamic> params) async {
           } catch (_) {}
         }
 
+        // Calculate bitrate from file size and duration (lightweight)
+        int? bitrate;
+        if (metadata.durationMs != null && metadata.durationMs! > 0) {
+          final fileSizeBytes = await File(path).length();
+          final durationSeconds = metadata.durationMs! / 1000;
+          bitrate = ((fileSizeBytes * 8) / durationSeconds / 1000).round();
+        }
+
         final song = Song(
           path: path,
           title: metadata.title ?? 'Unknown',
@@ -546,6 +550,7 @@ Future<void> _indexingIsolateEntry(Map<String, dynamic> params) async {
           duration: metadata.durationMs != null
               ? Duration(milliseconds: metadata.durationMs!.toInt())
               : null,
+          bitrate: bitrate,
         );
 
         sendPort.send(song);
