@@ -1,7 +1,7 @@
 name: ecilaes
 description: "A local/streaming, cross-platform music player."
 publish_to: 'none'
-copyright: "GPL-3.0"
+copyright: "MIT"
 
 version: 0.5.5
 

@@ -3,7 +3,7 @@
 # Ecilaes
 **A local-first, cross-platform music player.**
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Android | Linux](https://img.shields.io/badge/Platform-Android%20%7C%20Linux-green.svg)]()
 [![Built with Flutter](https://img.shields.io/badge/Built%20with-Flutter-02569B.svg?logo=flutter)](https://flutter.dev)
 
@@ -61,6 +61,6 @@ Ecilaes is an music player built with Flutter, seamlessly unifies your local mus
        bash scripts/build_all.sh --skip-android
        ```
 
-## 📄 License
+## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
