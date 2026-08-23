@@ -1,6 +1,10 @@
 // Ecilaes - Cross-platform music player
-// Copyright (c) 2026 hxprlee
-// SPDX-License-Identifier: MIT
+// Copyright (C) 2024  hxprlee
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
 
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';

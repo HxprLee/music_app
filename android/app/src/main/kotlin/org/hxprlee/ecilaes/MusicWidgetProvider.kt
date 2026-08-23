@@ -1,7 +1,3 @@
-// Ecilaes - Cross-platform music player
-// Copyright (c) 2026 hxprlee
-// SPDX-License-Identifier: MIT
-
 package org.hxprlee.ecilaes
 
 import android.app.PendingIntent
